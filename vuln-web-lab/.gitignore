@@ -1,0 +1,9 @@
+# Docker
+.vscode/
+.docker/
+
+# env
+.env
+
+# logs
+logs/
