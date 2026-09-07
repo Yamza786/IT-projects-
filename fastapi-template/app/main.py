@@ -1,20 +1,18 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI
 
-app = FastAPI()
-
-
-def fake_auth(token: str = ''):
-    # TODO: replace with real auth
-    if token != 'secret-token':
-        raise HTTPException(status_code=401, detail='Unauthorized')
-    return True
+app = FastAPI(title="FastAPI Template", version="0.1.0")
 
 
-@app.get('/')
+@app.get("/")
 async def root():
-    return {'message': 'FastAPI template is running'}
+    return {"message": "FastAPI template is running"}
 
 
-@app.get('/secure')
-async def secure_route(auth: bool = Depends(fake_auth)):
-    return {'message': 'You are authorized'}
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.get("/ping")
+async def ping():
+    return {"ping": "pong"}
