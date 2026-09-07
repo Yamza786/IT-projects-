@@ -1,4 +1,4 @@
-# fastapi-template
+fastapi-template
 
 A small FastAPI starter with a Dockerfile, health endpoint, and smoke tests.
 
@@ -8,7 +8,8 @@ Features:
 - `GET /ping` connectivity check
 - Dockerfile, dependency list, and test suite
 
-Run locally:
+Intended users
+- Developers starting a new microservice, instructors demonstrating modern Python API practices, or teams standardizing API scaffolding.
 
 1. `cd fastapi-template`
 2. `python -m venv .venv && . .venv/bin/activate`
