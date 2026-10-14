@@ -27,7 +27,12 @@ Docker build
 
 docker build -t it-projects-fastapi:latest .
 
-docker run -p 8000:8000 --env-file .env.example it-projects-fastapi:latest
+docker run -p 8000:8000 --env-file .env it-projects-fastapi:latest
+
+Copy `.env.example` to `.env` and set `API_TOKEN` to a long random value before
+starting the container. The `/secure` endpoint reads the token from the
+`X-API-Token` request header. It returns `503` when no server token is
+configured and `401` when the supplied token does not match.
 
 Tests
 
