@@ -14,7 +14,7 @@ python -m pip install -r ../requirements-termux.txt
 uvicorn app.main:app --reload
 ```
 
-Open `/docs`. The database defaults to `enterprise.db`; set `ENTERPRISE_DB` to choose another path. Keep the API on a trusted local network and protect the database and backups. This is a portfolio capstone, not a production accounting or security system.
+Open `/` for the business interface or `/docs` for the API. The database defaults to `enterprise.db`; set `ENTERPRISE_DB` to choose another path. Keep the API on a trusted local network and protect the database and backups. This is a portfolio capstone, not a production accounting or security system.
 
 ## Roles
 
@@ -33,6 +33,7 @@ Keys are read from environment variables and compared in memory; they are never 
 5. Review anomaly candidates and the evidence used to flag them.
 6. Import a JSON report from `security-log-analyzer` through `POST /api/security-reports`.
 7. Read the idempotent business event feed at `GET /api/integration-feed` and forward events into the Integration Hub.
+8. Attach authorized source passages through `POST /api/research-evidence`; monthly reports include these citations for review.
 
 API calls use `X-API-Key`. Example body schemas are available in `/docs`.
 

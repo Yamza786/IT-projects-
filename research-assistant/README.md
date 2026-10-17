@@ -13,11 +13,11 @@ Open `/` to add text documents and search. API docs: `/docs`. Set `RESEARCH_DB` 
 
 ## API
 
-- `POST /api/documents` with `{ "title": "...", "text": "..." }`
+- `POST /api/documents` with `{ "title": "...", "text": "...", "source_uri": "...", "accessed_on": "YYYY-MM-DD" }`
 - `GET /api/documents`
 - `GET /api/documents/{id}/summary` — extractive sentence selection, with source sentence indices
 - `DELETE /api/documents/{id}`
 - `POST /api/ask` with `{ "question": "...", "limit": 5 }`
 - `GET /api/unanswered`
 
-Each result cites a document ID, title, and exact stored passage. This is retrieval support, not a substitute for reading source material.
+Each result cites a document ID, title, optional source URI/access date, and exact stored passage. This is retrieval support, not a substitute for reading source material.

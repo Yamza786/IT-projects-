@@ -12,6 +12,7 @@ from statistics import median
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 DB_PATH = Path(os.environ.get("ENTERPRISE_DB", "enterprise.db"))
@@ -51,6 +52,8 @@ def initialize():
             CREATE TABLE IF NOT EXISTS security_alerts(id INTEGER PRIMARY KEY,report_id INTEGER NOT NULL REFERENCES security_reports(id) ON DELETE CASCADE,
                 rule TEXT NOT NULL,severity TEXT NOT NULL,source TEXT NOT NULL,failure_count INTEGER NOT NULL,success_count INTEGER NOT NULL,
                 evidence_lines TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS research_evidence(id INTEGER PRIMARY KEY,title TEXT NOT NULL,locator TEXT NOT NULL,
+                excerpt TEXT NOT NULL,document_id INTEGER,created_at TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS sales_day_idx ON sales(day);
             CREATE INDEX IF NOT EXISTS expenses_day_idx ON expenses(day);
         """)
@@ -129,6 +132,13 @@ class SecurityReportIn(BaseModel):
     input_sha256: str = Field(regex=r"^[0-9a-fA-F]{64}$")
     events_parsed: int = Field(ge=0)
     alerts: list[SecurityAlertIn] = Field(default_factory=list,max_items=10000)
+
+
+class ResearchEvidenceIn(BaseModel):
+    title: str = Field(min_length=1,max_length=300)
+    locator: str = Field(min_length=1,max_length=1000)
+    excerpt: str = Field(min_length=1,max_length=5000)
+    document_id: int | None = Field(default=None,gt=0)
 
 
 @app.get("/health")
@@ -244,6 +254,7 @@ def report_data(month: str):
         categories = [dict(r) for r in db.execute("SELECT category,SUM(amount_cents) AS total_cents,COUNT(*) AS count FROM expenses WHERE substr(day,1,7)=? GROUP BY category ORDER BY total_cents DESC",(month,))]
         monthly_expenses = [dict(r) for r in db.execute("SELECT id,category,amount_cents,day FROM expenses WHERE substr(day,1,7)=? ORDER BY category,amount_cents",(month,))]
         low_stock = [dict(r) for r in db.execute("SELECT sku,name,stock FROM products WHERE active=1 AND stock<=2 ORDER BY stock,name")]
+        evidence = [dict(r) for r in db.execute("SELECT id,title,locator,excerpt,document_id,created_at FROM research_evidence ORDER BY id DESC LIMIT 20")]
     grouped: dict[str,list[dict]] = {}
     for entry in monthly_expenses:
         grouped.setdefault(entry["category"],[]).append(entry)
@@ -264,6 +275,7 @@ def report_data(month: str):
                                    "reason":"Amount is more than 3.5 robust standard deviations above this month's category median."})
     return {"month":month,"sales_revenue_cents":sales,"expenses_cents":expenses,"operating_balance_cents":sales-expenses,
             "expense_categories":categories,"low_stock_products":low_stock,"expense_anomaly_candidates":candidates,
+            "supporting_sources":evidence,
             "method":"Modified z-score using category median and median absolute deviation; minimum five observations per category. Candidates require human review and are not findings of misconduct."}
 
 
@@ -315,6 +327,22 @@ def get_security_reports(limit: int = 50, _: dict = Depends(require_role("reader
     return reports
 
 
+@app.post("/api/research-evidence",status_code=201)
+def add_research_evidence(item: ResearchEvidenceIn,actor: dict = Depends(require_role("manager"))):
+    with closing(connect()) as db:
+        cur=db.execute("INSERT INTO research_evidence(title,locator,excerpt,document_id,created_at) VALUES(?,?,?,?,?)",
+                       (item.title.strip(),item.locator.strip(),item.excerpt.strip(),item.document_id,datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        audit(db,actor,"research_evidence_added","research_evidence",cur.lastrowid,"Source passage added for report context")
+        db.commit()
+        return dict(db.execute("SELECT * FROM research_evidence WHERE id=?",(cur.lastrowid,)).fetchone())
+
+
+@app.get("/api/research-evidence")
+def get_research_evidence(_: dict = Depends(require_role("reader"))):
+    with closing(connect()) as db:
+        return [dict(r) for r in db.execute("SELECT * FROM research_evidence ORDER BY id DESC LIMIT 100")]
+
+
 @app.get("/api/integration-feed")
 def integration_feed(after_id: int = 0, limit: int = 100, _: dict = Depends(require_role("reader"))):
     if after_id < 0 or not 1 <= limit <= 500:
@@ -329,3 +357,12 @@ def integration_feed(after_id: int = 0, limit: int = 100, _: dict = Depends(requ
              "occurred_at":entry["created_at"],
              "payload":{"entity":entry["entity"],"entity_id":entry["entity_id"],"detail":entry["detail"],"actor_role":entry["actor_role"]}}
             for entry in entries]
+
+
+@app.get("/",response_class=HTMLResponse)
+def home():
+    return '''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Polymath Enterprise</title><style>
+    *{box-sizing:border-box}body{margin:0;background:#101712;color:#edf4ed;font:15px/1.5 system-ui,sans-serif}main{max-width:1050px;margin:auto;padding:30px 18px}.tag{color:#8be3a9;font-size:12px;font-weight:700;letter-spacing:.13em}h1{font-size:clamp(30px,5vw,44px);margin:8px 0}p,.muted{color:#a2b0a5}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}section{background:#1a251d;border:1px solid #314638;border-radius:13px;padding:18px}h2{font-size:17px;margin:0 0 12px}label{font-weight:650;display:block;margin:9px 0 5px}input,textarea,button{font:inherit;width:100%;padding:10px;border:1px solid #405449;border-radius:8px;background:#101a14;color:#edf4ed}textarea{min-height:120px}button{background:#8be3a9;border:0;color:#132218;font-weight:700;cursor:pointer;margin-top:9px}pre{white-space:pre-wrap;word-break:break-word;max-height:430px;overflow:auto;background:#0c120e;border-radius:8px;padding:12px;color:#c8f2d4}#status{min-height:1.5em}.wide{grid-column:1/-1}@media(max-width:700px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+    </style></head><body><main><div class="tag">POLYMATH ENTERPRISE · SMALL BUSINESS WORKSPACE</div><h1>Operations with a clear audit trail.</h1><p>Enter a role key to manage business records. Keys are used in this browser tab only; this local app does not store them.</p><section><label for="key">Reader, manager, or admin API key</label><input id="key" type="password" autocomplete="off"><button id="connect">Load workspace</button><p id="status" role="status" aria-live="polite"></p></section><div class="grid"><section><h2>Monthly report</h2><label for="month">Month</label><input id="month" type="month"><button onclick="loadReport()">Load analytics</button><pre id="report">Connect to load this month's sales, expenses, stock, and anomaly candidates.</pre></section><section><h2>Products and stock</h2><form id="product"><label>SKU</label><input name="sku" required><label>Product name</label><input name="name" required><label>Unit price in cents</label><input name="price_cents" type="number" min="0" required><label>Opening stock</label><input name="opening_stock" type="number" min="0" required><button>Add product</button></form></section><section><h2>Customer</h2><form id="customer"><label>Name</label><input name="name" required><label>Email</label><input name="email" type="email"><button>Add customer</button></form></section><section><h2>Record a sale</h2><form id="sale"><label>Customer ID</label><input name="customer_id" type="number" min="1" required><label>Product ID</label><input name="product_id" type="number" min="1" required><label>Quantity</label><input name="quantity" type="number" min="1" required><button>Complete sale and deduct stock</button></form></section><section><h2>Operating expense</h2><form id="expense"><label>Category</label><input name="category" required><label>Amount in cents</label><input name="amount_cents" type="number" min="1" required><label>Memo</label><input name="memo"><button>Record expense</button></form></section><section><h2>Security report import</h2><p>Paste JSON exported by the SSH Log Analyzer. Requires an admin key.</p><form id="security"><label>Analyzer report JSON</label><textarea name="body" required></textarea><button>Import report</button></form><pre id="security-result"></pre></section><section class="wide"><h2>Workspace data</h2><button onclick="loadWorkspace()">Refresh products and customers</button><pre id="workspace">Connect to load current records.</pre></section><section class="wide"><h2>Integration feed</h2><button onclick="loadFeed()">Load canonical events for the Integration Hub</button><pre id="feed">Events include stable IDs for safe retries.</pre></section></div><p class="muted">Money uses integer cents. Outlier candidates are review prompts, not findings. <a style="color:#8be3a9" href="/docs">API reference</a> · <a style="color:#8be3a9" href="/health">Health</a></p></main><script>
+    const month=document.getElementById('month');month.value=new Date().toISOString().slice(0,7);function headers(){return {'Content-Type':'application/json','X-API-Key':document.getElementById('key').value}}async function call(url,method='GET',body){const r=await fetch(url,{method,headers:headers(),...(body===undefined?{}:{body:JSON.stringify(body)})});const d=await r.json();if(!r.ok)throw Error(d.detail||'Request failed');return d}async function connect(){try{await call('/api/products');document.getElementById('status').textContent='Connected. Role permissions apply to each action.';await loadWorkspace()}catch(e){document.getElementById('status').textContent=e.message}}document.getElementById('connect').onclick=connect;async function loadWorkspace(){try{const [p,c]=await Promise.all([call('/api/products'),call('/api/customers')]);document.getElementById('workspace').textContent=JSON.stringify({products:p,customers:c},null,2)}catch(e){document.getElementById('status').textContent=e.message}}async function loadReport(){try{const d=await call('/api/report?month='+encodeURIComponent(month.value));document.getElementById('report').textContent=JSON.stringify(d,null,2)}catch(e){document.getElementById('report').textContent=e.message}}async function loadFeed(){try{document.getElementById('feed').textContent=JSON.stringify(await call('/api/integration-feed'),null,2)}catch(e){document.getElementById('feed').textContent=e.message}}function bindForm(id,endpoint,makeBody,onSuccess){document.getElementById(id).onsubmit=async e=>{e.preventDefault();try{const data=await call(endpoint,'POST',makeBody(new FormData(e.target)));onSuccess?.(data);document.getElementById('status').textContent='Saved successfully.';e.target.reset()}catch(err){document.getElementById('status').textContent=err.message}}}bindForm('product','/api/products',f=>({sku:f.get('sku'),name:f.get('name'),price_cents:Number(f.get('price_cents')),opening_stock:Number(f.get('opening_stock'))}));bindForm('customer','/api/customers',f=>({name:f.get('name'),email:f.get('email')}));bindForm('sale','/api/sales',f=>({customer_id:Number(f.get('customer_id')),items:[{product_id:Number(f.get('product_id')),quantity:Number(f.get('quantity'))}]}),d=>document.getElementById('report').textContent=JSON.stringify(d,null,2));bindForm('expense','/api/expenses',f=>({category:f.get('category'),amount_cents:Number(f.get('amount_cents')),memo:f.get('memo')}));document.getElementById('security').onsubmit=async e=>{e.preventDefault();try{const body=JSON.parse(e.target.body.value);document.getElementById('security-result').textContent=JSON.stringify(await call('/api/security-reports','POST',body),null,2)}catch(err){document.getElementById('security-result').textContent=err.message}};
+    </script></body></html>'''

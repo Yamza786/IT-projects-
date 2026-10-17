@@ -7,7 +7,7 @@ import os
 import re
 import sqlite3
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -29,9 +29,14 @@ def init():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with closing(connect()) as db:
         db.executescript("""
-            CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY,title TEXT NOT NULL,text TEXT NOT NULL,created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY,title TEXT NOT NULL,text TEXT NOT NULL,source_uri TEXT NOT NULL DEFAULT '',accessed_on TEXT,created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS unanswered(id INTEGER PRIMARY KEY,question TEXT NOT NULL,asked_at TEXT NOT NULL);
         """)
+        columns={row[1] for row in db.execute("PRAGMA table_info(documents)")}
+        if "source_uri" not in columns:
+            db.execute("ALTER TABLE documents ADD COLUMN source_uri TEXT NOT NULL DEFAULT ''")
+        if "accessed_on" not in columns:
+            db.execute("ALTER TABLE documents ADD COLUMN accessed_on TEXT")
         db.commit()
 
 
@@ -43,6 +48,8 @@ def startup():
 class DocumentIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     text: str = Field(min_length=1, max_length=100_000)
+    source_uri: str = Field(default="", max_length=1000)
+    accessed_on: date | None = None
 
 
 class AskIn(BaseModel):
@@ -73,8 +80,8 @@ def passages(text: str) -> list[str]:
 @app.post("/api/documents", status_code=201)
 def add_document(item: DocumentIn):
     with closing(connect()) as db:
-        cur = db.execute("INSERT INTO documents(title,text,created_at) VALUES(?,?,?)",
-                         (item.title.strip(), item.text.strip(), datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        cur = db.execute("INSERT INTO documents(title,text,source_uri,accessed_on,created_at) VALUES(?,?,?,?,?)",
+                         (item.title.strip(),item.text.strip(),item.source_uri.strip(),item.accessed_on.isoformat() if item.accessed_on else None,datetime.now(timezone.utc).isoformat(timespec="seconds")))
         db.commit()
         return {"id": cur.lastrowid, "title": item.title.strip()}
 
@@ -82,7 +89,7 @@ def add_document(item: DocumentIn):
 @app.get("/api/documents")
 def list_documents():
     with closing(connect()) as db:
-        return [dict(r) for r in db.execute("SELECT id,title,created_at,length(text) AS characters FROM documents ORDER BY id DESC")]
+        return [dict(r) for r in db.execute("SELECT id,title,source_uri,accessed_on,created_at,length(text) AS characters FROM documents ORDER BY id DESC")]
 
 
 @app.delete("/api/documents/{document_id}")
@@ -100,7 +107,7 @@ def summarize_document(document_id: int, sentences: int = 5):
     if not 1 <= sentences <= 12:
         raise HTTPException(422,"sentences must be between 1 and 12")
     with closing(connect()) as db:
-        doc=db.execute("SELECT id,title,text FROM documents WHERE id=?",(document_id,)).fetchone()
+        doc=db.execute("SELECT id,title,text,source_uri,accessed_on FROM documents WHERE id=?",(document_id,)).fetchone()
     if not doc:
         raise HTTPException(404,"Document not found")
     parts=[part.strip() for part in re.split(r"(?<=[.!?])\s+",doc["text"]) if part.strip()]
@@ -112,7 +119,7 @@ def summarize_document(document_id: int, sentences: int = 5):
         score=len(terms)/max(len(part.split())**0.5,1)
         ranked.append((score,index,part))
     selected=sorted(sorted(ranked,key=lambda x:(-x[0],x[1]))[:sentences],key=lambda x:x[1])
-    return {"document_id":document_id,"title":doc["title"],"summary":" ".join(x[2] for x in selected),
+    return {"document_id":document_id,"title":doc["title"],"source_uri":doc["source_uri"],"accessed_on":doc["accessed_on"],"summary":" ".join(x[2] for x in selected),
             "source_sentence_indices":[x[1]+1 for x in selected],
             "method":"Extractive ranking by unique content-word density; verify against the original document."}
 
@@ -124,7 +131,7 @@ def ask(item: AskIn):
         raise HTTPException(422, "Question needs searchable words")
     ranked = []
     with closing(connect()) as db:
-        docs = db.execute("SELECT id,title,text FROM documents ORDER BY id").fetchall()
+        docs = db.execute("SELECT id,title,text,source_uri,accessed_on FROM documents ORDER BY id").fetchall()
         for doc in docs:
             chunks = passages(doc["text"])
             doc_tokens = tokens(doc["text"])
@@ -135,7 +142,7 @@ def ask(item: AskIn):
                     continue
                 # Favor passages that cover more distinct query terms, with a small length penalty.
                 score = len(overlap) / len(query) + len(overlap) / max(len(words), 1) * 0.2
-                ranked.append({"document_id": doc["id"], "title": doc["title"], "passage_index": index + 1,
+                ranked.append({"document_id": doc["id"], "title": doc["title"],"source_uri":doc["source_uri"],"accessed_on":doc["accessed_on"], "passage_index": index + 1,
                                "excerpt": passage[:900], "matched_terms": sorted(overlap), "score": round(score, 4),
                                "coverage": round(len(query & doc_tokens) / len(query), 4)})
         ranked.sort(key=lambda r: (-r["score"], r["document_id"], r["passage_index"]))
@@ -161,9 +168,9 @@ def home():
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Margin · Research Assistant</title><style>
     *{{box-sizing:border-box}}body{{margin:0;background:#f4f1e9;color:#252c29;font:16px/1.55 Georgia,serif}}main{{max-width:900px;margin:auto;padding:34px 20px}}.brand{{font:700 12px system-ui;color:#257061;letter-spacing:.13em}}h1{{font-size:clamp(32px,5vw,48px);margin:10px 0}}p{{color:#58635f}}section{{background:#fffdf8;border:1px solid #dfded4;border-radius:12px;padding:20px;margin:16px 0}}h2{{font-size:20px;margin:0 0 14px}}label{{font:600 13px system-ui;display:block;margin:10px 0 5px}}input,textarea,button{{font:inherit;border-radius:8px;padding:10px;border:1px solid #d1d5cc;width:100%}}textarea{{min-height:125px}}button{{width:auto;background:#257061;color:white;border:0;font:bold 14px system-ui;cursor:pointer}}.cite{{border-left:3px solid #62b7a2;padding:10px 14px;margin:12px 0;background:#f3f9f6}}small{{color:#66736d}}#results{{margin-top:14px}}a{{color:#257061}}
     </style></head><body><main><div class="brand">MARGIN · SOURCE-FIRST RESEARCH</div><h1>Find the passage.<br>Check the source.</h1><p>Local document retrieval with visible citations and an explicit “no evidence found” outcome.</p>
-    <section><h2>Add a text document</h2><form id="doc"><label for="title">Document title</label><input id="title" name="title" required maxlength="200"><label for="text">Text</label><textarea id="text" name="text" required maxlength="100000"></textarea><p><button>Add document</button></p></form></section>
+    <section><h2>Add a text document</h2><form id="doc"><label for="title">Document title</label><input id="title" name="title" required maxlength="200"><label for="source_uri">Source URL or archive reference</label><input id="source_uri" name="source_uri" maxlength="1000"><label for="accessed_on">Accessed on</label><input id="accessed_on" name="accessed_on" type="date"><label for="text">Text</label><textarea id="text" name="text" required maxlength="100000"></textarea><p><button>Add document</button></p></form></section>
     <section><h2>Ask a research question</h2><form id="ask"><label for="question">Question</label><input id="question" name="question" required minlength="3" maxlength="1000"><p><button>Find source passages</button></p></form><div id="results" aria-live="polite"></div></section>
     <section><h2>Indexed documents</h2><ul>{docs}</ul></section><p><a href="/docs">API reference</a> · Search is approximate and does not replace reading original sources.</p></main><script>
-    document.getElementById('doc').onsubmit=async e=>{{e.preventDefault();const f=e.target;const r=await fetch('/api/documents',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{title:f.title.value,text:f.text.value}})}});if(r.ok)location.reload();else alert('Could not save document')}}
-    document.getElementById('ask').onsubmit=async e=>{{e.preventDefault();const q=e.target.question.value;const r=await fetch('/api/ask',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{question:q}})}});const d=await r.json();document.getElementById('results').innerHTML=d.results.length?d.results.map(x=>`<article class="cite"><small>Source: ${{esc(x.title)}} · document #${{x.document_id}} · passage ${{x.passage_index}}</small><p>${{esc(x.excerpt)}}</p><small>Matched terms: ${{esc(x.matched_terms.join(', '))}}</small></article>`).join(''):'<p>No matching passages. This question was saved for review.</p>'}}function esc(s){{return String(s).replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]))}}
+    document.getElementById('doc').onsubmit=async e=>{{e.preventDefault();const f=e.target;const r=await fetch('/api/documents',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{title:f.title.value,text:f.text.value,source_uri:f.source_uri.value,accessed_on:f.accessed_on.value||null}})}});if(r.ok)location.reload();else alert('Could not save document')}}
+    document.getElementById('ask').onsubmit=async e=>{{e.preventDefault();const q=e.target.question.value;const r=await fetch('/api/ask',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{question:q}})}});const d=await r.json();document.getElementById('results').innerHTML=d.results.length?d.results.map(x=>`<article class="cite"><small>Source: ${{esc(x.title)}} · ${{esc(x.source_uri||'local record')}} · accessed ${{esc(x.accessed_on||'date not recorded')}} · document #${{x.document_id}} · passage ${{x.passage_index}}</small><p>${{esc(x.excerpt)}}</p><small>Matched terms: ${{esc(x.matched_terms.join(', '))}}</small></article>`).join(''):'<p>No matching passages. This question was saved for review.</p>'}}function esc(s){{return String(s).replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]))}}
     </script></body></html>'''

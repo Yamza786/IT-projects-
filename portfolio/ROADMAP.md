@@ -10,8 +10,8 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 ## Stage 2 — practical applications
 
 - **03 Personal Finance and Wealth Analytics — usable first release:** local rand-based ledger, budgets, savings goals, debt balances/payments, monthly cash-flow/savings-rate summary, net-worth snapshots, and explicitly assumption-based scenarios. Next: transaction edits and exports.
-- **04 SME Business Management System — usable first release:** local products, customers, draft quotes, atomic stock-check and invoice issue, paid-status transitions, audit events, and low-stock/revenue report. Next: quotation UI, role permissions, stock adjustments, and exports.
-- **09 E-commerce and Booking Platform — usable first release:** service catalogue, timezone-aware availability slots, scrypt-backed accounts, expiring/revocable sessions, own-booking view/cancellation, admin-key protected management, overlap prevention, and rate-limited booking requests. Next: account verification, configurable calendars, and payment sandbox.
+- **04 SME Business Management System — usable first release:** local products, customers, draft quotes, atomic stock-check and invoice issue, paid-status transitions, audit events, stock adjustment ledger, and low-stock/revenue report. Next: role permissions, quotation editing, and exports.
+- **09 E-commerce and Booking Platform — usable first release:** service catalogue, timezone-aware availability slots, scrypt-backed accounts, expiring/revocable sessions, own-booking view/cancellation, admin-key protected management, overlap prevention, and in-memory request throttles. Next: account verification, configurable calendars, and payment sandbox.
 
 ## Stage 3 — specialisation
 
@@ -30,7 +30,7 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 
 - **07 South African Open-Data Intelligence Platform — usable local report generator:** validates tidy CSVs and creates a standalone interactive area/year report. Sample values are synthetic; real datasets must document provenance, definitions, and limitations.
 - **11 Accessible Multilingual Services Portal — usable content catalogue:** ten South African language codes, HTTPS source records, verification dates, keyboard-accessible responsive browsing, and translation review guidance. No unverified service claims are seeded.
-- **15 Polymath Enterprise — usable API capstone:** customers, products, stock ledger, atomic sales, expenses, role-checked keys, audit records, monthly analytics, robust expense anomaly candidates with explanations, security report import from project 05, and idempotent event feed for project 10. Next: evidence links to project 02, browser administration, export/backup, and production hardening.
+- **15 Polymath Enterprise — usable capstone:** browser administration, customers, products, stock ledger, atomic sales, expenses, role-checked keys, audit records, monthly analytics, robust expense anomaly candidates with explanations, security report import from project 05, and idempotent event feed for project 10. Next: evidence links to project 02, export/backup, and production hardening.
 
 ## Delivery standard
 

@@ -23,6 +23,7 @@ DB_PATH = Path(os.environ.get("BOOKING_DB", "booking.db"))
 app = FastAPI(title="Service Booking Platform", version="0.1.0")
 ADMIN_KEY = os.environ.get("BOOKING_ADMIN_KEY", "")
 creation_times: dict[str, deque[float]] = defaultdict(deque)
+auth_times: dict[str, deque[float]] = defaultdict(deque)
 
 
 def require_admin(x_admin_key: str | None = Header(default=None, alias="X-Admin-Key")):
@@ -41,6 +42,18 @@ def check_public_rate(request: Request):
         stamps.popleft()
     if len(stamps)>=20:
         raise HTTPException(429,"Booking request limit reached for this client")
+    stamps.append(now)
+    return True
+
+
+def check_auth_rate(request: Request):
+    address=request.client.host if request.client else "unknown"
+    now=time.monotonic()
+    stamps=auth_times[address]
+    while stamps and now-stamps[0]>=600:
+        stamps.popleft()
+    if len(stamps)>=10:
+        raise HTTPException(429,"Account action rate limit reached")
     stamps.append(now)
     return True
 
@@ -121,7 +134,7 @@ def current_account(authorization: str | None = Header(default=None)):
 
 
 @app.post("/api/accounts",status_code=201)
-def create_account(item: AccountIn):
+def create_account(item: AccountIn, _: bool = Depends(check_auth_rate)):
     email=item.email.strip().lower()
     salt=secrets.token_bytes(16)
     with closing(connect()) as db:
@@ -139,7 +152,7 @@ def create_account(item: AccountIn):
 
 
 @app.post("/api/login")
-def login(item: LoginIn):
+def login(item: LoginIn, _: bool = Depends(check_auth_rate)):
     with closing(connect()) as db:
         account=db.execute("SELECT * FROM accounts WHERE email=?",(item.email.strip().lower(),)).fetchone()
         if not account or not hmac.compare_digest(password_hash(item.password.get_secret_value(),account["salt"]),account["password_hash"]):

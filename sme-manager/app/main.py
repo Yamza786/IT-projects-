@@ -215,6 +215,8 @@ def issue_invoice(invoice_id: int):
             if cur.rowcount != 1:
                 db.rollback()
                 raise HTTPException(409, f"Insufficient stock for product {line['product_id']}")
+            db.execute("INSERT INTO stock_ledger(product_id,delta,reason,created_at) VALUES(?,?,?,?)",
+                       (line["product_id"],-line["quantity"],f"invoice {invoice_id}",datetime.now(timezone.utc).isoformat(timespec="seconds")))
         db.execute("UPDATE invoices SET status='issued' WHERE id=?", (invoice_id,))
         audit(db, "invoice_issued", "invoice", invoice_id, "Quote issued; stock deducted atomically")
         for line in lines:
