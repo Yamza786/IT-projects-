@@ -31,5 +31,9 @@ Keys are read from environment variables and compared in memory; they are never 
 3. Record an operating expense in integer cents.
 4. Read monthly revenue, expenses, net operating balance, and category summaries.
 5. Review anomaly candidates and the evidence used to flag them.
+6. Import a JSON report from `security-log-analyzer` through `POST /api/security-reports`.
+7. Read the idempotent business event feed at `GET /api/integration-feed` and forward events into the Integration Hub.
 
 API calls use `X-API-Key`. Example body schemas are available in `/docs`.
+
+The Security Log Analyzer exports the fields accepted by the security report import endpoint. The integration feed provides stable event IDs and idempotency keys so downstream ingestion can safely retry.

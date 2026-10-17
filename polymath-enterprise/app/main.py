@@ -46,6 +46,11 @@ def initialize():
                 delta INTEGER NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY,actor_role TEXT NOT NULL,event TEXT NOT NULL,
                 entity TEXT NOT NULL,entity_id INTEGER NOT NULL,detail TEXT NOT NULL,created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS security_reports(id INTEGER PRIMARY KEY,input_sha256 TEXT NOT NULL UNIQUE,
+                event_count INTEGER NOT NULL,created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS security_alerts(id INTEGER PRIMARY KEY,report_id INTEGER NOT NULL REFERENCES security_reports(id) ON DELETE CASCADE,
+                rule TEXT NOT NULL,severity TEXT NOT NULL,source TEXT NOT NULL,failure_count INTEGER NOT NULL,success_count INTEGER NOT NULL,
+                evidence_lines TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS sales_day_idx ON sales(day);
             CREATE INDEX IF NOT EXISTS expenses_day_idx ON expenses(day);
         """)
@@ -54,6 +59,9 @@ def initialize():
 
 @app.on_event("startup")
 def startup():
+    configured=[value for value in KEYS.values() if value]
+    if len(configured)!=len(set(configured)):
+        raise RuntimeError("Enterprise role keys must be unique")
     initialize()
 
 
@@ -106,6 +114,21 @@ class ExpenseIn(BaseModel):
     amount_cents: int = Field(gt=0, le=10_000_000_000)
     memo: str = Field(default="", max_length=500)
     day: date = Field(default_factory=date.today)
+
+
+class SecurityAlertIn(BaseModel):
+    rule: str = Field(min_length=1,max_length=100)
+    severity: Literal["low","medium","high"]
+    source: str = Field(min_length=1,max_length=100)
+    failure_count: int = Field(ge=0)
+    success_count: int = Field(ge=0)
+    evidence_lines: list[int] = Field(default_factory=list,max_items=1000)
+
+
+class SecurityReportIn(BaseModel):
+    input_sha256: str = Field(regex=r"^[0-9a-fA-F]{64}$")
+    events_parsed: int = Field(ge=0)
+    alerts: list[SecurityAlertIn] = Field(default_factory=list,max_items=10000)
 
 
 @app.get("/health")
@@ -263,3 +286,46 @@ def stock_ledger(product_id: int | None = None, _: dict = Depends(require_role("
         if product_id:
             return [dict(r) for r in db.execute("SELECT * FROM stock_ledger WHERE product_id=? ORDER BY id DESC",(product_id,))]
         return [dict(r) for r in db.execute("SELECT * FROM stock_ledger ORDER BY id DESC LIMIT 500")]
+
+
+@app.post("/api/security-reports", status_code=201)
+def import_security_report(item: SecurityReportIn, actor: dict = Depends(require_role("admin"))):
+    with closing(connect()) as db:
+        try:
+            cur=db.execute("INSERT INTO security_reports(input_sha256,event_count,created_at) VALUES(?,?,?)",
+                           (item.input_sha256.lower(),item.events_parsed,datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409,"This log file hash has already been imported")
+        report_id=cur.lastrowid
+        db.executemany("INSERT INTO security_alerts(report_id,rule,severity,source,failure_count,success_count,evidence_lines) VALUES(?,?,?,?,?,?,?)",
+                       [(report_id,a.rule,a.severity,a.source,a.failure_count,a.success_count,",".join(str(n) for n in a.evidence_lines)) for a in item.alerts])
+        audit(db,actor,"security_report_imported","security_report",report_id,f"{len(item.alerts)} alert(s), {item.events_parsed} parsed events")
+        db.commit()
+    return {"id":report_id,"input_sha256":item.input_sha256.lower(),"alerts_imported":len(item.alerts)}
+
+
+@app.get("/api/security-reports")
+def get_security_reports(limit: int = 50, _: dict = Depends(require_role("reader"))):
+    if not 1 <= limit <= 200:
+        raise HTTPException(422,"limit must be between 1 and 200")
+    with closing(connect()) as db:
+        reports=[dict(r) for r in db.execute("SELECT * FROM security_reports ORDER BY id DESC LIMIT ?",(limit,))]
+        for report in reports:
+            report["alerts"]=[dict(a) for a in db.execute("SELECT * FROM security_alerts WHERE report_id=? ORDER BY severity DESC,id",(report["id"],))]
+    return reports
+
+
+@app.get("/api/integration-feed")
+def integration_feed(after_id: int = 0, limit: int = 100, _: dict = Depends(require_role("reader"))):
+    if after_id < 0 or not 1 <= limit <= 500:
+        raise HTTPException(422,"after_id must be nonnegative and limit between 1 and 500")
+    event_names={"sale_recorded":"sales.completed","expense_recorded":"expenses.recorded",
+                 "stock_adjusted":"inventory.adjusted","product_created":"inventory.product-created"}
+    with closing(connect()) as db:
+        entries=[dict(r) for r in db.execute("SELECT * FROM audit_log WHERE id>? ORDER BY id LIMIT ?",(after_id,limit))]
+    return [{"source":"polymath-enterprise","external_id":f"audit-{entry['id']}",
+             "idempotency_key":f"polymath-enterprise-audit-{entry['id']}",
+             "kind":event_names.get(entry["event"],"audit."+entry["event"]),
+             "occurred_at":entry["created_at"],
+             "payload":{"entity":entry["entity"],"entity_id":entry["entity_id"],"detail":entry["detail"],"actor_role":entry["actor_role"]}}
+            for entry in entries]

@@ -11,7 +11,7 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 
 - **03 Personal Finance and Wealth Analytics — usable first release:** local rand-based ledger, budgets, savings goals, debt balances/payments, monthly cash-flow/savings-rate summary, net-worth snapshots, and explicitly assumption-based scenarios. Next: transaction edits and exports.
 - **04 SME Business Management System — usable first release:** local products, customers, draft quotes, atomic stock-check and invoice issue, paid-status transitions, audit events, and low-stock/revenue report. Next: quotation UI, role permissions, stock adjustments, and exports.
-- **09 E-commerce and Booking Platform — usable first release:** service catalogue, timezone-aware availability slots, overlap prevention, admin-key protected booking list/cancellation, rate-limited booking requests, and no card handling. Next: account verification, configurable calendars, and payment sandbox.
+- **09 E-commerce and Booking Platform — usable first release:** service catalogue, timezone-aware availability slots, scrypt-backed accounts, expiring/revocable sessions, own-booking view/cancellation, admin-key protected management, overlap prevention, and rate-limited booking requests. Next: account verification, configurable calendars, and payment sandbox.
 
 ## Stage 3 — specialisation
 
@@ -23,14 +23,14 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 ## Stage 4 — professional engineering
 
 - **10 API and Integration Hub — usable first release:** versioned event ingestion, scoped keys, rate limits, validation, idempotency, and local event storage. Next: persistent gateway-level rate limits, credential rotation, and outbound adapters.
-- **13 Cloud Deployment and DevOps Demonstrator — container and CI ready:** non-root image, persistent data volume, health check, GitHub Actions build and smoke workflow, and deployment runbook. Next: a monitored deployment to a chosen host.
+- **13 Cloud Deployment and DevOps Demonstrator — container and CI ready:** non-root Polymath Enterprise image, persistent data volume, health check, GitHub Actions build and smoke workflow, and deployment runbook. Next: a monitored deployment to a chosen host.
 - **14 Open-Source Contribution Portfolio — usable CLI release:** local contribution journal, validated issue/PR URLs, and Markdown showcase. Next: richer review and verification fields.
 
 ## Stage 5 — analysis, access, and integration
 
 - **07 South African Open-Data Intelligence Platform — usable local report generator:** validates tidy CSVs and creates a standalone interactive area/year report. Sample values are synthetic; real datasets must document provenance, definitions, and limitations.
 - **11 Accessible Multilingual Services Portal — usable content catalogue:** ten South African language codes, HTTPS source records, verification dates, keyboard-accessible responsive browsing, and translation review guidance. No unverified service claims are seeded.
-- **15 Polymath Enterprise — usable API capstone:** customers, products, stock ledger, atomic sales, expenses, role-checked keys, audit records, monthly analytics, and robust expense anomaly candidates with explanations. Next: browser administration, export/backup, model integration only with explicit data controls, and production hardening.
+- **15 Polymath Enterprise — usable API capstone:** customers, products, stock ledger, atomic sales, expenses, role-checked keys, audit records, monthly analytics, robust expense anomaly candidates with explanations, security report import from project 05, and idempotent event feed for project 10. Next: evidence links to project 02, browser administration, export/backup, and production hardening.
 
 ## Delivery standard
 

@@ -1,19 +1,19 @@
-name: SME Manager container
+name: Polymath Enterprise container
 
 on:
   push:
     branches: [integration/fastapi, main]
     paths:
-      - 'sme-manager/**'
+      - 'polymath-enterprise/**'
       - 'devops-demo/**'
       - 'requirements-termux.txt'
-      - '.github/workflows/sme-container.yml'
+      - '.github/workflows/enterprise-container.yml'
   pull_request:
     paths:
-      - 'sme-manager/**'
+      - 'polymath-enterprise/**'
       - 'devops-demo/**'
       - 'requirements-termux.txt'
-      - '.github/workflows/sme-container.yml'
+      - '.github/workflows/enterprise-container.yml'
 
 jobs:
   build-and-smoke:
@@ -21,17 +21,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build container
-        run: docker build -f devops-demo/Dockerfile -t polymath-sme:ci .
+        run: docker build -f devops-demo/Dockerfile -t polymath-enterprise:ci .
       - name: Start container
-        run: docker run -d --name sme -p 8000:8000 -v sme-ci-data:/data polymath-sme:ci
+        run: docker run -d --name enterprise -p 8000:8000 -v enterprise-ci-data:/data polymath-enterprise:ci
       - name: Wait for health endpoint
         run: |
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:8000/health; then exit 0; fi
             sleep 2
           done
-          docker logs sme
+            docker logs enterprise
           exit 1
       - name: Stop container
         if: always()
-        run: docker rm --force sme || true
+        run: docker rm --force enterprise || true

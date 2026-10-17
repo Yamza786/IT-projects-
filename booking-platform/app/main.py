@@ -6,15 +6,17 @@ import html
 import os
 import sqlite3
 import hmac
+import hashlib
+import secrets
 import time
 from collections import defaultdict, deque
 from contextlib import closing
 from datetime import date, datetime, time as clock_time, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Depends
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DB_PATH = Path(os.environ.get("BOOKING_DB", "booking.db"))
@@ -55,6 +57,10 @@ def init():
         db.executescript("""
             CREATE TABLE IF NOT EXISTS services(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE,description TEXT NOT NULL DEFAULT '',duration_minutes INTEGER NOT NULL CHECK(duration_minutes BETWEEN 5 AND 480),price_cents INTEGER NOT NULL CHECK(price_cents>=0),active INTEGER NOT NULL DEFAULT 1);
             CREATE TABLE IF NOT EXISTS customers(id INTEGER PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL,created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS accounts(id INTEGER PRIMARY KEY,customer_id INTEGER NOT NULL UNIQUE REFERENCES customers(id) ON DELETE CASCADE,
+                email TEXT NOT NULL UNIQUE,salt BLOB NOT NULL,password_hash BLOB NOT NULL,created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS sessions(id INTEGER PRIMARY KEY,account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS bookings(id INTEGER PRIMARY KEY,service_id INTEGER NOT NULL REFERENCES services(id),customer_id INTEGER NOT NULL REFERENCES customers(id),starts_at_utc TEXT NOT NULL,ends_at_utc TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'confirmed' CHECK(status IN ('confirmed','cancelled')),created_at TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS booking_time_idx ON bookings(status,starts_at_utc,ends_at_utc);
         """)
@@ -77,14 +83,82 @@ class ServiceIn(BaseModel):
 
 class BookingIn(BaseModel):
     service_id: int = Field(gt=0)
-    name: str = Field(min_length=1, max_length=160)
-    email: str = Field(min_length=3, max_length=254)
     starts_at: datetime
+
+
+class AccountIn(BaseModel):
+    name: str = Field(min_length=1,max_length=160)
+    email: str = Field(min_length=3,max_length=254)
+    password: SecretStr = Field(min_length=12,max_length=256)
+
+
+class LoginIn(BaseModel):
+    email: str = Field(min_length=3,max_length=254)
+    password: SecretStr
 
 
 def service_rows():
     with closing(connect()) as db:
         return [dict(r) for r in db.execute("SELECT * FROM services WHERE active=1 ORDER BY name")]
+
+
+def password_hash(password: str, salt: bytes) -> bytes:
+    return hashlib.scrypt(password.encode("utf-8"),salt=salt,n=2**14,r=8,p=1,dklen=32)
+
+
+def current_account(authorization: str | None = Header(default=None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401,"Log in to your booking account")
+    token=authorization[7:]
+    token_hash=hashlib.sha256(token.encode()).hexdigest()
+    with closing(connect()) as db:
+        row=db.execute("""SELECT a.id AS account_id,a.customer_id,a.email,c.name,s.id AS session_id
+            FROM sessions s JOIN accounts a ON a.id=s.account_id JOIN customers c ON c.id=a.customer_id
+            WHERE s.token_hash=? AND s.expires_at>?""",(token_hash,datetime.now(timezone.utc).isoformat(timespec="seconds"))).fetchone()
+    if not row:
+        raise HTTPException(401,"Session is invalid or expired")
+    return dict(row)
+
+
+@app.post("/api/accounts",status_code=201)
+def create_account(item: AccountIn):
+    email=item.email.strip().lower()
+    salt=secrets.token_bytes(16)
+    with closing(connect()) as db:
+        try:
+            cur=db.execute("INSERT INTO customers(name,email,created_at) VALUES(?,?,?)",
+                           (item.name.strip(),email,datetime.now(timezone.utc).isoformat(timespec="seconds")))
+            customer_id=cur.lastrowid
+            db.execute("INSERT INTO accounts(customer_id,email,salt,password_hash,created_at) VALUES(?,?,?,?,?)",
+                       (customer_id,email,salt,password_hash(item.password.get_secret_value(),salt),datetime.now(timezone.utc).isoformat(timespec="seconds")))
+            db.commit()
+        except sqlite3.IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(409,"An account with this email already exists") from exc
+    return {"created":True,"email":email,"message":"Account created. You can now sign in."}
+
+
+@app.post("/api/login")
+def login(item: LoginIn):
+    with closing(connect()) as db:
+        account=db.execute("SELECT * FROM accounts WHERE email=?",(item.email.strip().lower(),)).fetchone()
+        if not account or not hmac.compare_digest(password_hash(item.password.get_secret_value(),account["salt"]),account["password_hash"]):
+            raise HTTPException(401,"Email or password is incorrect")
+        token=secrets.token_urlsafe(32)
+        created=datetime.now(timezone.utc)
+        expires=created+timedelta(hours=24)
+        db.execute("INSERT INTO sessions(account_id,token_hash,expires_at,created_at) VALUES(?,?,?,?)",
+                   (account["id"],hashlib.sha256(token.encode()).hexdigest(),expires.isoformat(timespec="seconds"),created.isoformat(timespec="seconds")))
+        db.commit()
+    return {"access_token":token,"token_type":"bearer","expires_at":expires.isoformat(timespec="seconds")}
+
+
+@app.delete("/api/account/session")
+def logout(account: dict = Depends(current_account)):
+    with closing(connect()) as db:
+        db.execute("DELETE FROM sessions WHERE id=?",(account["session_id"],))
+        db.commit()
+    return {"logged_out":True}
 
 
 @app.get("/api/services")
@@ -105,7 +179,7 @@ def add_service(item: ServiceIn, _: bool = Depends(require_admin)):
 
 
 @app.post("/api/bookings", status_code=201)
-def create_booking(item: BookingIn, _: bool = Depends(check_public_rate)):
+def create_booking(item: BookingIn, account: dict = Depends(current_account), _: bool = Depends(check_public_rate)):
     if item.starts_at.tzinfo is None or item.starts_at.utcoffset() is None:
         raise HTTPException(422, "starts_at must include a timezone offset")
     starts = item.starts_at.astimezone(timezone.utc)
@@ -131,11 +205,8 @@ def create_booking(item: BookingIn, _: bool = Depends(check_public_rate)):
         if conflict:
             db.rollback()
             raise HTTPException(409, "That time overlaps an existing booking")
-        cur = db.execute("INSERT INTO customers(name,email,created_at) VALUES(?,?,?)",
-                         (item.name.strip(), item.email.strip().lower(), datetime.now(timezone.utc).isoformat(timespec="seconds")))
-        customer_id = cur.lastrowid
         cur = db.execute("INSERT INTO bookings(service_id,customer_id,starts_at_utc,ends_at_utc,status,created_at) VALUES(?,?,?,?,'confirmed',?)",
-                         (service["id"], customer_id, start_iso, end_iso, datetime.now(timezone.utc).isoformat(timespec="seconds")))
+                         (service["id"], account["customer_id"], start_iso, end_iso, datetime.now(timezone.utc).isoformat(timespec="seconds")))
         db.commit()
         return {"id": cur.lastrowid, "service": service["name"], "starts_at_utc": start_iso, "ends_at_utc": end_iso, "status": "confirmed"}
 
@@ -178,6 +249,26 @@ def get_bookings(_: bool = Depends(require_admin)):
         """)]
 
 
+@app.get("/api/my-bookings")
+def my_bookings(account: dict = Depends(current_account)):
+    with closing(connect()) as db:
+        return [dict(r) for r in db.execute("""
+            SELECT b.id,b.starts_at_utc,b.ends_at_utc,b.status,s.name AS service
+            FROM bookings b JOIN services s ON s.id=b.service_id WHERE b.customer_id=? ORDER BY b.starts_at_utc
+        """,(account["customer_id"],))]
+
+
+@app.post("/api/my-bookings/{booking_id}/cancel")
+def cancel_my_booking(booking_id: int, account: dict = Depends(current_account)):
+    with closing(connect()) as db:
+        cur=db.execute("UPDATE bookings SET status='cancelled' WHERE id=? AND customer_id=? AND status='confirmed'",
+                       (booking_id,account["customer_id"]))
+        if not cur.rowcount:
+            raise HTTPException(404,"Active booking not found")
+        db.commit()
+    return {"id":booking_id,"status":"cancelled"}
+
+
 @app.post("/api/bookings/{booking_id}/cancel")
 def cancel_booking(booking_id: int, _: bool = Depends(require_admin)):
     with closing(connect()) as db:
@@ -196,7 +287,9 @@ def home():
     cards = "".join(f'<option value="{s["id"]}">{html.escape(s["name"])} · {s["duration_minutes"]} min</option>' for s in service_rows())
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenSlot · Booking</title><style>
     *{{box-sizing:border-box}}body{{margin:0;background:#f4f7f6;color:#1d302c;font:16px/1.5 system-ui,sans-serif}}main{{max-width:700px;margin:auto;padding:40px 20px}}.eyebrow{{color:#16836d;font-size:12px;letter-spacing:.13em;font-weight:700}}h1{{font-size:clamp(32px,5vw,48px);margin:8px 0}}section{{background:white;border:1px solid #dce8e4;border-radius:16px;padding:22px;margin:18px 0}}label{{display:block;font-weight:650;margin:14px 0 6px}}input,select,button{{width:100%;font:inherit;padding:11px;border:1px solid #cbdad5;border-radius:9px}}button{{margin-top:16px;background:#16836d;color:white;border:0;font-weight:700;cursor:pointer}}#message{{min-height:1.6em}}a{{color:#16836d}}
-    </style></head><body><main><div class="eyebrow">OPENSLOT · EASY SERVICE BOOKINGS</div><h1>Choose a time that works.</h1><p>Available 30-minute slots use your device's IANA timezone.</p><section><form id="book"><label for="service">Service</label><select id="service" name="service_id">{cards}</select><label for="name">Your name</label><input id="name" name="name" autocomplete="name" required maxlength="160"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="254"><label for="day">Date</label><input id="day" name="day" type="date" required><label for="time">Available start time</label><select id="time" name="starts_at" required></select><button>Request booking</button></form><p id="message" role="status" aria-live="polite"></p></section><p>No card details are collected. <a href="/docs">API reference</a></p></main><script>
+    </style></head><body><main><div class="eyebrow">OPENSLOT · EASY SERVICE BOOKINGS</div><h1>Choose a time that works.</h1><p>Available 30-minute slots use your device's IANA timezone.</p><section><h2>Your account</h2><form id="account"><label for="account-name">Name for new account</label><input id="account-name" name="name" autocomplete="name" maxlength="160"><label for="account-email">Email</label><input id="account-email" name="email" type="email" autocomplete="email" required maxlength="254"><label for="account-password">Password · at least 12 characters</label><input id="account-password" name="password" type="password" autocomplete="current-password" minlength="12" required><div><button type="button" id="register">Create account</button> <button type="button" id="login">Sign in</button> <button type="button" id="logout">Sign out</button></div><p id="account-status" role="status" aria-live="polite"></p></form><ul id="mine"></ul></section><section><form id="book"><label for="service">Service</label><select id="service" name="service_id">{cards}</select><label for="day">Date</label><input id="day" name="day" type="date" required><label for="time">Available start time</label><select id="time" name="starts_at" required></select><button>Request booking</button></form><p id="message" role="status" aria-live="polite"></p></section><p>No card details are collected. <a href="/docs">API reference</a></p></main><script>
     const form=document.getElementById('book'),timeSelect=document.getElementById('time');const now=new Date();const localDate=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);form.day.value=localDate;form.day.min=localDate;async function loadSlots(){{timeSelect.replaceChildren();const zone=Intl.DateTimeFormat().resolvedOptions().timeZone;const url=`/api/availability?service_id=${{form.service_id.value}}&day=${{form.day.value}}&timezone=${{encodeURIComponent(zone)}}`;const data=await fetch(url).then(r=>r.json());for(const slot of data.slots||[]){{const option=new Option(slot.slice(11,16),slot);timeSelect.add(option)}}if(!timeSelect.options.length)timeSelect.add(new Option('No times available',''))}}form.day.onchange=loadSlots;form.service_id.onchange=loadSlots;loadSlots();
-    form.onsubmit=async e=>{{e.preventDefault();const f=e.target;const body={{service_id:Number(f.service_id.value),name:f.name.value,email:f.email.value,starts_at:f.starts_at.value}};const r=await fetch('/api/bookings',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});const d=await r.json();document.getElementById('message').textContent=r.ok?'Booking confirmed for '+d.starts_at_utc:(d.detail||'Could not book this time.');if(r.ok)loadSlots()}}
+    let token=sessionStorage.getItem('bookingToken')||'';const accountForm=document.getElementById('account'),accountStatus=document.getElementById('account-status');async function accountAction(mode){{const f=accountForm;const body={{email:f.email.value,password:f.password.value}};if(mode==='register'){{body.name=f.name.value;const r=await fetch('/api/accounts',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});const d=await r.json();accountStatus.textContent=r.ok?'Account created; sign in to continue.':(d.detail||'Could not create account');return}}const r=await fetch('/api/login',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});const d=await r.json();if(!r.ok){{accountStatus.textContent=d.detail||'Sign-in failed';return}}token=d.access_token;sessionStorage.setItem('bookingToken',token);accountStatus.textContent='Signed in · token expires '+d.expires_at;loadMine()}}document.getElementById('register').onclick=()=>accountAction('register');document.getElementById('login').onclick=()=>accountAction('login');document.getElementById('logout').onclick=async()=>{{if(token)await fetch('/api/account/session',{{method:'DELETE',headers:{{'Authorization':'Bearer '+token}}}});token='';sessionStorage.removeItem('bookingToken');accountStatus.textContent='Signed out';document.getElementById('mine').replaceChildren()}};
+    async function loadMine(){{if(!token)return;const r=await fetch('/api/my-bookings',{{headers:{{'Authorization':'Bearer '+token}}}});if(!r.ok){{sessionStorage.removeItem('bookingToken');token='';accountStatus.textContent='Session expired; sign in again.';return}}const items=await r.json(),box=document.getElementById('mine');box.replaceChildren();for(const b of items){{const li=document.createElement('li');li.textContent=`${{b.service}} · ${{b.starts_at_utc}} · ${{b.status}} `;if(b.status==='confirmed'){{const btn=document.createElement('button');btn.textContent='Cancel';btn.onclick=async()=>{{await fetch(`/api/my-bookings/${{b.id}}/cancel`,{{method:'POST',headers:{{'Authorization':'Bearer '+token}}}});loadMine()}};li.append(btn)}}box.append(li)}}}}if(token)loadMine();
+    form.onsubmit=async e=>{{e.preventDefault();if(!token){{document.getElementById('message').textContent='Sign in before booking.';return}}const f=e.target;const body={{service_id:Number(f.service_id.value),starts_at:f.starts_at.value}};const r=await fetch('/api/bookings',{{method:'POST',headers:{{'Content-Type':'application/json','Authorization':'Bearer '+token}},body:JSON.stringify(body)}});const d=await r.json();document.getElementById('message').textContent=r.ok?'Booking confirmed for '+d.starts_at_utc:(d.detail||'Could not book this time.');if(r.ok){{loadSlots();loadMine()}}}}
     </script></body></html>'''
