@@ -228,6 +228,11 @@ def unanswered():
 def evaluate(item: EvaluationIn):
     """Measure retrieval recall@k and reciprocal rank against a small labeled query set."""
     results=[]
+    expected_ids={document_id for case in item.cases for document_id in case.relevant_document_ids}
+    with closing(connect()) as db:
+        existing_ids={row[0] for row in db.execute("SELECT id FROM documents WHERE id IN ("+",".join("?" for _ in expected_ids)+")",tuple(expected_ids))} if expected_ids else set()
+    if existing_ids!=expected_ids:
+        raise HTTPException(422,"All relevant_document_ids must refer to indexed documents")
     for case in item.cases:
         query=tokens(case.question)
         ranked=[]

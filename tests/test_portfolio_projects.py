@@ -75,6 +75,7 @@ def test_research_assistant_returns_cited_evidence(tmp_path):
         assert imported.status_code==201
         evaluation=client.post("/api/evaluate",json={"cases":[{"question":"What makes a claim easier to verify?","relevant_document_ids":[created.json()["id"]]}],"k":3})
         assert evaluation.status_code==200 and evaluation.json()["mean_recall_at_k"]==1
+        assert client.post("/api/evaluate",json={"cases":[{"question":"What makes a claim easier to verify?","relevant_document_ids":[99999]}]}).status_code==422
 
 
 def test_finance_cashflow_and_debt_payment(tmp_path):
@@ -225,6 +226,20 @@ def test_booking_requires_account_and_rejects_overlap(tmp_path, monkeypatch):
         assert ("starttls",) in smtp_calls and ("send","customer@example.test","Verify your booking account") in smtp_calls
 
 
+def test_booking_rate_limit_survives_process_restart(tmp_path,monkeypatch):
+    monkeypatch.setenv("BOOKING_VERIFICATION_MODE","disabled")
+    first=load_module("booking-platform","test_booking_rate_first");first.DB_PATH=tmp_path/"shared-booking.db";first.ACCOUNT_ACTION_LIMIT=1
+    monkeypatch.setattr(first.time,"time",lambda:1800000000)
+    with TestClient(first.app) as client:
+        body={"name":"First","email":"first@example.test","password":"long-demo-password"}
+        assert client.post("/api/accounts",json=body).status_code==201
+        body["email"]="second@example.test"
+        assert client.post("/api/accounts",json=body).status_code==429
+    second=load_module("booking-platform","test_booking_rate_second");second.DB_PATH=tmp_path/"shared-booking.db";second.ACCOUNT_ACTION_LIMIT=1
+    with TestClient(second.app) as client:
+        assert client.post("/api/accounts",json={"name":"Third","email":"third@example.test","password":"long-demo-password"}).status_code==429
+
+
 def test_integration_hub_idempotency(tmp_path):
     with open_app(tmp_path, "integration-hub", "test_hub") as (client, module):
         module.WRITE_KEY="write-test-key"
@@ -253,7 +268,7 @@ def test_integration_hub_idempotency(tmp_path):
         dispatcher.deliver(first.json(),f"http://127.0.0.1:{server.server_port}/events","test-token")
     finally:
         server.shutdown();server.server_close();worker.join(timeout=2)
-    assert received[0][0]["external_id"]=="17" and received[0][1]=="hub-billing-17" and received[0][2]=="Bearer test-token"
+    assert received[0][0]["external_id"]=="17" and received[0][1].startswith("hub-") and received[0][2]=="Bearer test-token"
 
 
 def test_portal_requires_https_source_and_serves_language_filter(tmp_path):
@@ -296,7 +311,7 @@ def test_csv_and_open_data_tools_validate_synthetic_inputs(tmp_path):
     spec=importlib.util.spec_from_file_location("test_open_data",ROOT/"sa-open-data"/"dashboard.py")
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     data=module.read_data(ROOT/"sa-open-data"/"sample.csv")
-    assert len(data)==6 and "Example" in module.build(data,"Demo","Synthetic sample")
+    assert len(data)==6 and "Example" in module.build(data,"Demo","Synthetic sample",synthetic=True)
     try:
         module.build(data,"Real data","Agency data")
         assert False,"missing provenance must be rejected"

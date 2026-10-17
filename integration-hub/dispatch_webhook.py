@@ -2,6 +2,7 @@
 """Forward hub events to an explicitly configured HTTPS JSON webhook."""
 
 import json
+import hashlib
 import os
 import sys
 import tempfile
@@ -18,7 +19,8 @@ class NoRedirect(HTTPRedirectHandler):
 
 def deliver(event: dict, destination: str, token: str = "") -> None:
     body={key:event[key] for key in ("source","external_id","kind","occurred_at","payload")}
-    headers={"Content-Type":"application/json","Idempotency-Key":f"hub-{event['idempotency_key']}"}
+    digest=hashlib.sha256(event["idempotency_key"].encode()).hexdigest()
+    headers={"Content-Type":"application/json","Idempotency-Key":f"hub-{digest}"}
     if token:
         headers["Authorization"]="Bearer "+token
     with build_opener(NoRedirect).open(Request(destination,data=json.dumps(body,separators=(",",":" )).encode(),headers=headers,method="POST"),timeout=20) as response:

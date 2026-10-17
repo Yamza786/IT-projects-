@@ -42,8 +42,8 @@ def read_data(path: Path) -> list[dict]:
 
 
 def build(records: list[dict], title: str, source: str, *, source_url: str = "", accessed_on: str = "",
-          units: str = "", definitions: str = "", coverage: str = "", missing_data: str = "") -> str:
-    synthetic="synthetic" in source.lower()
+          units: str = "", definitions: str = "", coverage: str = "", missing_data: str = "",
+          synthetic: bool = False) -> str:
     parsed=urlparse(source_url) if source_url else None
     if source_url and (parsed.scheme!="https" or not parsed.hostname):
         raise ValueError("Source URL must use HTTPS")
@@ -52,7 +52,9 @@ def build(records: list[dict], title: str, source: str, *, source_url: str = "",
             date.fromisoformat(accessed_on)
         except ValueError as exc:
             raise ValueError("Access date must use YYYY-MM-DD format") from exc
-    if not synthetic and not all((source_url,accessed_on,units,definitions,coverage,missing_data)):
+    if not source.strip():
+        raise ValueError("Publisher/dataset name is required")
+    if not synthetic and not all(value.strip() for value in (source_url,accessed_on,units,definitions,coverage,missing_data)):
         raise ValueError("Real datasets require HTTPS URL, access date, units, definitions, geographic coverage, and missing-data notes")
     safe_json = json.dumps(records, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     safe_title = html.escape(title)
@@ -72,7 +74,8 @@ def main() -> int:
     parser.add_argument("csv_file", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--title", default="South African Open-Data Explorer")
-    parser.add_argument("--source", required=True, help="publisher and dataset reference; identify synthetic data as such")
+    parser.add_argument("--source", required=True, help="publisher/dataset name, or synthetic sample label")
+    parser.add_argument("--synthetic",action="store_true",help="explicitly mark this dataset as synthetic training/sample data")
     parser.add_argument("--source-url",default="",help="HTTPS dataset URL (required for real data)")
     parser.add_argument("--accessed-on",default="",help="date dataset was accessed")
     parser.add_argument("--units",default="",help="measurement units")
@@ -82,7 +85,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         report = build(read_data(args.csv_file), args.title, args.source,source_url=args.source_url,accessed_on=args.accessed_on,
-                       units=args.units,definitions=args.definitions,coverage=args.coverage,missing_data=args.missing_data)
+                       units=args.units,definitions=args.definitions,coverage=args.coverage,missing_data=args.missing_data,synthetic=args.synthetic)
         args.output.write_text(report, encoding="utf-8")
     except (OSError, ValueError) as exc:
         print(f"Could not generate report: {exc}", file=sys.stderr)

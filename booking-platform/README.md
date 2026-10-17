@@ -29,4 +29,4 @@ Passwords are stored as salted scrypt hashes; bearer sessions expire after 24 ho
 
 For payment-flow testing, submit `sbx_test_success` or `sbx_test_decline` to `POST /api/my-bookings/{id}/payments/sandbox` with an idempotency key. The API stores only the outcome, amount, and currency; it rejects card data by design. This is a local simulator, not a connection to a processor's test environment and cannot accept real funds. Public launches should use a chosen provider's official sandbox and webhook signature validation.
 
-Public booking and authentication throttles are in memory and reset on restart. Use a gateway-level persistent limiter before exposing this demonstration to the internet.
+Authentication and booking throttles use hashed client-address fingerprints and SQLite minute/hour buckets, so a process restart does not reset a client's current window. These fixed windows are still a small single-instance control, not a distributed gateway limiter.

@@ -15,7 +15,7 @@ Example District,2023,Example measure,14.1
 The example values above are synthetic. Generate a report:
 
 ```sh
-python dashboard.py sample.csv report.html --title "Example analysis" --source "Synthetic sample"
+python dashboard.py sample.csv report.html --title "Example analysis" --source "Synthetic sample" --synthetic
 ```
 
 For real data, the command also requires source URL, access date, units, indicator definitions, geographic coverage, and missing-data handling. These values appear in the report provenance block:

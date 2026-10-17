@@ -11,7 +11,6 @@ import secrets
 import smtplib
 import time
 from email.message import EmailMessage
-from collections import defaultdict, deque
 from contextlib import closing
 from datetime import date, datetime, time as clock_time, timedelta, timezone
 from pathlib import Path
@@ -25,8 +24,8 @@ DB_PATH = Path(os.environ.get("BOOKING_DB", "booking.db"))
 app = FastAPI(title="Service Booking Platform", version="0.1.0")
 ADMIN_KEY = os.environ.get("BOOKING_ADMIN_KEY", "")
 VERIFICATION_MODE=os.environ.get("BOOKING_VERIFICATION_MODE","disabled").lower()
-creation_times: dict[str, deque[float]] = defaultdict(deque)
-auth_times: dict[str, deque[float]] = defaultdict(deque)
+PUBLIC_BOOKING_LIMIT=20
+ACCOUNT_ACTION_LIMIT=10
 
 
 def require_admin(x_admin_key: str | None = Header(default=None, alias="X-Admin-Key")):
@@ -38,33 +37,37 @@ def require_admin(x_admin_key: str | None = Header(default=None, alias="X-Admin-
 
 
 def check_public_rate(request: Request):
-    address=request.client.host if request.client else "unknown"
-    now=time.monotonic()
-    stamps=creation_times[address]
-    while stamps and now-stamps[0]>=3600:
-        stamps.popleft()
-    if len(stamps)>=20:
-        raise HTTPException(429,"Booking request limit reached for this client")
-    stamps.append(now)
-    return True
+    return take_rate_limit(request,"booking",PUBLIC_BOOKING_LIMIT,3600,"Booking request limit reached for this client")
 
 
 def check_auth_rate(request: Request):
-    address=request.client.host if request.client else "unknown"
-    now=time.monotonic()
-    stamps=auth_times[address]
-    while stamps and now-stamps[0]>=600:
-        stamps.popleft()
-    if len(stamps)>=10:
-        raise HTTPException(429,"Account action rate limit reached")
-    stamps.append(now)
-    return True
+    return take_rate_limit(request,"account",ACCOUNT_ACTION_LIMIT,600,"Account action rate limit reached")
 
 
 def connect():
     c = sqlite3.connect(DB_PATH, timeout=10)
     c.row_factory = sqlite3.Row
     return c
+
+
+def take_rate_limit(request: Request, scope: str, limit: int, window_seconds: int, message: str):
+    address=request.client.host if request.client else "unknown"
+    fingerprint=hashlib.sha256((scope+"\0"+address).encode()).hexdigest()
+    now=int(time.time());bucket=now//window_seconds
+    with closing(connect()) as db:
+        db.execute("BEGIN IMMEDIATE")
+        row=db.execute("SELECT request_count FROM request_limits WHERE fingerprint=? AND scope=? AND window_bucket=?",
+                       (fingerprint,scope,bucket)).fetchone()
+        if row and row["request_count"]>=limit:
+            db.rollback()
+            retry=window_seconds-(now%window_seconds)
+            raise HTTPException(429,message,headers={"Retry-After":str(retry)})
+        db.execute("INSERT INTO request_limits(fingerprint,scope,window_bucket,request_count) VALUES(?,?,?,1) "
+                   "ON CONFLICT(fingerprint,scope,window_bucket) DO UPDATE SET request_count=request_count+1",
+                   (fingerprint,scope,bucket))
+        db.execute("DELETE FROM request_limits WHERE scope=? AND window_bucket<?",(scope,bucket-2))
+        db.commit()
+    return True
 
 
 def init():
@@ -84,6 +87,8 @@ def init():
             CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY,booking_id INTEGER NOT NULL REFERENCES bookings(id),customer_id INTEGER NOT NULL REFERENCES customers(id),
                 idempotency_key TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('succeeded','declined')),amount_cents INTEGER NOT NULL CHECK(amount_cents>=0),
                 currency TEXT NOT NULL DEFAULT 'ZAR',created_at TEXT NOT NULL,UNIQUE(customer_id,idempotency_key));
+            CREATE TABLE IF NOT EXISTS request_limits(fingerprint TEXT NOT NULL,scope TEXT NOT NULL,window_bucket INTEGER NOT NULL,request_count INTEGER NOT NULL,
+                PRIMARY KEY(fingerprint,scope,window_bucket));
             CREATE INDEX IF NOT EXISTS booking_time_idx ON bookings(status,starts_at_utc,ends_at_utc);
         """)
         account_columns={r[1] for r in db.execute("PRAGMA table_info(accounts)")}
