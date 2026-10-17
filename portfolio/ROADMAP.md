@@ -35,3 +35,18 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 ## Delivery standard
 
 Each substantial project should include a problem statement, intended users, setup and usage instructions, screenshots or a demo, meaningful verification, architecture and decision notes, security and accessibility considerations, known limitations, and attribution for dependencies or borrowed material. Use synthetic data by default; never commit credentials or private data.
+
+## Stage 6 — IT operations, security, and portfolio (projects 16–25)
+
+- **16 Personal Cybersecurity Command Center — local first release:** import offline SSH/PAM analyzer findings into SQLite, deduplicate source files by SHA-256, review/close alerts with notes; does not retain raw logs or run continuously.
+- **17 Network Diagnostic Toolkit — bounded CLI release:** resolve one hostname, optionally test one TCP port and a capped ICMP count, show route when available, export JSON; no network/port scanning.
+- **18 AI IT Helpdesk Assistant — cited support API:** offline keyword retrieval over a small approved article set, source IDs, fallback to human support, SQLite tickets, optional explicitly configured OpenAI-compatible endpoint; no autonomous commands.
+- **19 Password Security Lab — CLI learning release:** hidden password prompt, Argon2id and bcrypt support when installed, standard-library scrypt fallback, verification and transparent composition hints; hashes and credentials are never stored.
+- **20 PC Health Monitor — local sampler:** optional psutil CPU/memory/disk metrics, thresholds and SQLite history; no telemetry or fleet collection.
+- **21 Mini Cloud Infrastructure Lab — container/CI release:** non-root standard-library HTTP service, read-only container, health endpoint, persistent SQLite volume, loopback-only Compose port.
+- **22 Vulnerability Management Dashboard — offline tracker:** import local CVE JSON, validate IDs, track triage states and notes; does not fetch feeds or determine exploitability.
+- **23 Automated Software Testing Lab — test practice release:** pure sample ticket service, boundary/parameterized pytest examples, dedicated CI job.
+- **24 IT Asset Management System — local API release:** FastAPI/SQLite asset create/search/update and audit history; no identity provider or internet exposure.
+- **25 IT/CS Portfolio Command Center — static showcase:** searchable project catalogue, category filters, responsive accessible UI; links to project docs without implying live deployment.
+
+Projects 16–25 are independent educational demos. The security and networking projects are for authorized defensive administration only. Optional dependencies and operational boundaries are documented in each project README.

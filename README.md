@@ -1,6 +1,6 @@
 # IT-projects-
 
-A portfolio repository containing 15 practical, independently runnable applications alongside educational examples and starter templates. The 15-project suite demonstrates local-first product design, full-stack workflows, data analysis, defensive security, accessibility, integration, and deployment practice.
+A portfolio repository containing 25 practical, independently runnable applications alongside educational examples and starter templates. The portfolio demonstrates local-first product design, full-stack workflows, data analysis, defensive security, accessibility, integration, and deployment practice.
 
 ## The 15-project portfolio
 
@@ -24,6 +24,23 @@ A portfolio repository containing 15 practical, independently runnable applicati
 
 The staged implementation record is in [portfolio/ROADMAP.md](portfolio/ROADMAP.md); architecture choices, trade-offs, and system boundaries are in [portfolio/ARCHITECTURE.md](portfolio/ARCHITECTURE.md). All projects are learning-scale examples. Their individual READMEs describe local setup, intended workflows, and limitations.
 
+## IT operations and security projects (16–25)
+
+| # | Project | Demonstrates |
+|---|---|---|
+| 16 | [Personal Cybersecurity Command Center](personal-cybersecurity-center/README.md) | Local log ingestion, transparent alerts, acknowledgements and incident notes |
+| 17 | [Network Diagnostic Toolkit](network-diagnostics/README.md) | Safe DNS, TCP, ICMP and route diagnostics with structured reports |
+| 18 | [AI IT Helpdesk Assistant](ai-it-helpdesk/README.md) | Cited local troubleshooting knowledge, ticket tracking and optional LLM adapter |
+| 19 | [Password Security Lab](password-security-lab/README.md) | Argon2/bcrypt password hashing, verification and safe password-strength guidance |
+| 20 | [PC Health Monitor](pc-health-monitor/README.md) | Cross-platform system metrics, threshold alerts and history |
+| 21 | [Mini Cloud Infrastructure Lab](mini-cloud-lab/README.md) | Docker Compose, health checks, CI build and deployment fundamentals |
+| 22 | [Vulnerability Management Dashboard](vulnerability-dashboard/README.md) | CVE import, asset/product matching, triage states and remediation tracking |
+| 23 | [Automated Software Testing Lab](software-testing-lab/README.md) | A runnable sample service, pytest unit/API tests and CI quality gates |
+| 24 | [IT Asset Management System](it-asset-management/README.md) | Asset lifecycle, assignment, inventory search and audit history |
+| 25 | [IT/CS Portfolio Command Center](portfolio-command-center/README.md) | Searchable portfolio dashboard and project metadata workflow |
+
+The first runnable release details are in [portfolio/ROADMAP.md](portfolio/ROADMAP.md). Security and network tools are designed for systems and networks you own or are authorized to assess; they do not perform exploitation or broad network scanning.
+
 ## Verify the portfolio workflows
 
 Use Python 3.12 or newer and install dependencies with `python -m pip install -r requirements-termux.txt`. Run the same suite as CI:
@@ -32,7 +49,7 @@ Use Python 3.12 or newer and install dependencies with `python -m pip install -r
 python -m pytest tests -q
 ```
 
-The GitHub Actions workflow also runs a Chromium accessibility/keyboard check, validates the hardened Compose configuration, builds the container, and checks its health endpoint. These checks cover the documented demo workflows; manual screen-reader, device zoom, production security, and host-specific recovery reviews remain necessary before a public service launch.
+The GitHub Actions workflow also runs Chromium accessibility/keyboard checks for the adaptive-learning app and portfolio dashboard, builds and runs the mini-cloud lab container with health and persistence checks, validates the hardened Compose configuration, and builds the enterprise container. These checks cover documented demo workflows; manual screen-reader, device zoom, production security, and host-specific recovery reviews remain necessary before a public service launch.
 
 ## Other repository projects
 
