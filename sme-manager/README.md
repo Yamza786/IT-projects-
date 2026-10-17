@@ -1,6 +1,6 @@
 # SME Business Management System
 
-A local-first workflow for products, customers, quotations, invoices, inventory, and a basic sales report. SQLite transactions protect invoice issuance and stock deduction as one operation. This portfolio edition has no user accounts or multi-device sync; do not expose it to the internet with real customer data.
+A local-first workflow for products, customers, quotations, invoices, inventory, and a basic sales report. SQLite transactions protect invoice issuance and stock deduction as one operation. It supports environment-configured reader, manager, and admin API keys; with no keys configured, it runs in open local-development mode. It has no multi-device sync; do not expose an unconfigured instance to the internet.
 
 ## Run
 
@@ -10,6 +10,8 @@ uvicorn app.main:app --reload
 ```
 
 Open <http://127.0.0.1:8000>; API docs are at `/docs`. Set `SME_DB` to choose the database location. Use fictional customers and products for demos.
+
+For role checks, copy `.env.example` and set distinct `SME_READER_KEY`, `SME_MANAGER_KEY`, and `SME_ADMIN_KEY` values. Send them as `X-API-Key`. Readers can inspect records and reports, managers can change business data, and admins can read the audit log. The browser product form accepts a manager key.
 
 ## Workflows
 

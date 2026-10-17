@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import hmac
 import os
 import sqlite3
 from contextlib import closing
@@ -10,12 +11,28 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 DB_PATH = Path(os.environ.get("SME_DB", "sme.db"))
 app = FastAPI(title="SME Business Management", version="0.1.0")
+ROLE_KEYS = {"reader":os.environ.get("SME_READER_KEY",""),"manager":os.environ.get("SME_MANAGER_KEY",""),"admin":os.environ.get("SME_ADMIN_KEY","")}
+ROLE_RANK = {"reader":1,"manager":2,"admin":3}
+
+
+def require_role(minimum: str):
+    def dependency(x_api_key: str | None = Header(default=None,alias="X-API-Key")):
+        configured=[(role,key) for role,key in ROLE_KEYS.items() if key]
+        if not configured:
+            return {"role":"local_dev"}
+        if not x_api_key:
+            raise HTTPException(401,"X-API-Key is required")
+        for role,key in configured:
+            if hmac.compare_digest(x_api_key,key) and ROLE_RANK[role]>=ROLE_RANK[minimum]:
+                return {"role":role}
+        raise HTTPException(403,"API key does not have the required role")
+    return dependency
 
 
 def connect():
@@ -50,6 +67,9 @@ def initialize():
 
 @app.on_event("startup")
 def startup():
+    configured=[key for key in ROLE_KEYS.values() if key]
+    if len(configured)!=len(set(configured)):
+        raise RuntimeError("SME role keys must be unique")
     initialize()
 
 
@@ -88,18 +108,18 @@ def audit(db, event: str, entity: str, entity_id: int, detail: str):
 
 
 @app.get("/api/products")
-def products():
+def products(_: dict = Depends(require_role("reader"))):
     with closing(connect()) as db:
         return [dict(r) for r in db.execute("SELECT * FROM products WHERE active=1 ORDER BY name")]
 
 
 @app.post("/api/products", status_code=201)
-def add_product(item: ProductIn):
+def add_product(item: ProductIn, actor: dict = Depends(require_role("manager"))):
     with closing(connect()) as db:
         try:
             cur = db.execute("INSERT INTO products(sku,name,unit_price_cents,stock,reorder_at) VALUES(?,?,?,?,?)",
                              (item.sku.strip().upper(), item.name.strip(), item.unit_price_cents, item.stock, item.reorder_at))
-            audit(db, "product_created", "product", cur.lastrowid, f"SKU {item.sku.strip().upper()} created; opening stock {item.stock}")
+            audit(db, "product_created", "product", cur.lastrowid, f"{actor['role']} created SKU {item.sku.strip().upper()}; opening stock {item.stock}")
             if item.stock:
                 db.execute("INSERT INTO stock_ledger(product_id,delta,reason,created_at) VALUES(?,?,?,?)",
                            (cur.lastrowid,item.stock,"opening stock",datetime.now(timezone.utc).isoformat(timespec="seconds")))
@@ -110,23 +130,23 @@ def add_product(item: ProductIn):
 
 
 @app.get("/api/customers")
-def customers():
+def customers(_: dict = Depends(require_role("reader"))):
     with closing(connect()) as db:
-        return [dict(r) for r in db.execute("SELECT * FROM customers ORDER BY name")]
+        return [dict(r) for r in db.execute("SELECT id,name,email,phone,created_at FROM customers ORDER BY name")]
 
 
 @app.post("/api/customers", status_code=201)
-def add_customer(item: CustomerIn):
+def add_customer(item: CustomerIn, actor: dict = Depends(require_role("manager"))):
     with closing(connect()) as db:
         cur = db.execute("INSERT INTO customers(name,email,phone,created_at) VALUES(?,?,?,?)",
                          (item.name.strip(), item.email.strip(), item.phone.strip(), datetime.now(timezone.utc).isoformat(timespec="seconds")))
-        audit(db,"customer_created","customer",cur.lastrowid,"Customer record created")
+        audit(db,"customer_created","customer",cur.lastrowid,f"{actor['role']} created customer record")
         db.commit()
         return dict(db.execute("SELECT * FROM customers WHERE id=?", (cur.lastrowid,)).fetchone())
 
 
 @app.post("/api/invoices", status_code=201)
-def create_invoice(item: InvoiceIn):
+def create_invoice(item: InvoiceIn, actor: dict = Depends(require_role("manager"))):
     with closing(connect()) as db:
         if not db.execute("SELECT 1 FROM customers WHERE id=?", (item.customer_id,)).fetchone():
             raise HTTPException(404, "Customer not found")
@@ -140,7 +160,7 @@ def create_invoice(item: InvoiceIn):
                     raise HTTPException(404, f"Product {line.product_id} not found")
                 db.execute("INSERT INTO invoice_items(invoice_id,product_id,description,quantity,unit_price_cents) VALUES(?,?,?,?,?)",
                            (invoice_id, product["id"], product["name"], line.quantity, product["unit_price_cents"]))
-            audit(db, "quote_created", "invoice", invoice_id, f"Draft quote created for customer {item.customer_id}")
+            audit(db, "quote_created", "invoice", invoice_id, f"{actor['role']} created draft quote for customer {item.customer_id}")
             db.commit()
         except Exception:
             db.rollback()
@@ -149,7 +169,7 @@ def create_invoice(item: InvoiceIn):
 
 
 @app.post("/api/products/{product_id}/adjustments", status_code=201)
-def adjust_stock(product_id: int, item: StockAdjustmentIn):
+def adjust_stock(product_id: int, item: StockAdjustmentIn, actor: dict = Depends(require_role("manager"))):
     if item.delta == 0:
         raise HTTPException(422,"Stock adjustment cannot be zero")
     with closing(connect()) as db:
@@ -162,13 +182,13 @@ def adjust_stock(product_id: int, item: StockAdjustmentIn):
         db.execute("UPDATE products SET stock=stock+? WHERE id=?",(item.delta,product_id))
         db.execute("INSERT INTO stock_ledger(product_id,delta,reason,created_at) VALUES(?,?,?,?)",
                    (product_id,item.delta,item.reason.strip(),datetime.now(timezone.utc).isoformat(timespec="seconds")))
-        audit(db,"stock_adjusted","product",product_id,f"Stock delta {item.delta}: {item.reason.strip()}")
+        audit(db,"stock_adjusted","product",product_id,f"{actor['role']} stock delta {item.delta}: {item.reason.strip()}")
         db.commit()
         return dict(db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone())
 
 
 @app.get("/api/stock-ledger")
-def stock_ledger(product_id: int | None = None):
+def stock_ledger(product_id: int | None = None, _: dict = Depends(require_role("reader"))):
     with closing(connect()) as db:
         if product_id:
             return [dict(r) for r in db.execute("SELECT * FROM stock_ledger WHERE product_id=? ORDER BY id DESC",(product_id,))]
@@ -176,7 +196,7 @@ def stock_ledger(product_id: int | None = None):
 
 
 @app.get("/api/audit")
-def get_audit(limit: int = Query(default=100,ge=1,le=500)):
+def get_audit(limit: int = Query(default=100,ge=1,le=500), _: dict = Depends(require_role("admin"))):
     with closing(connect()) as db:
         return [dict(r) for r in db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?",(limit,))]
 
@@ -191,14 +211,14 @@ def invoice_detail(db, invoice_id: int):
 
 
 @app.get("/api/invoices")
-def invoices(limit: int = Query(default=100, ge=1, le=500)):
+def invoices(limit: int = Query(default=100, ge=1, le=500), _: dict = Depends(require_role("reader"))):
     with closing(connect()) as db:
         ids = [r[0] for r in db.execute("SELECT id FROM invoices ORDER BY id DESC LIMIT ?", (limit,))]
         return [invoice_detail(db, invoice_id) for invoice_id in ids]
 
 
 @app.post("/api/invoices/{invoice_id}/issue")
-def issue_invoice(invoice_id: int):
+def issue_invoice(invoice_id: int, actor: dict = Depends(require_role("manager"))):
     with closing(connect()) as db:
         db.execute("BEGIN IMMEDIATE")
         invoice = db.execute("SELECT * FROM invoices WHERE id=?", (invoice_id,)).fetchone()
@@ -218,7 +238,7 @@ def issue_invoice(invoice_id: int):
             db.execute("INSERT INTO stock_ledger(product_id,delta,reason,created_at) VALUES(?,?,?,?)",
                        (line["product_id"],-line["quantity"],f"invoice {invoice_id}",datetime.now(timezone.utc).isoformat(timespec="seconds")))
         db.execute("UPDATE invoices SET status='issued' WHERE id=?", (invoice_id,))
-        audit(db, "invoice_issued", "invoice", invoice_id, "Quote issued; stock deducted atomically")
+        audit(db, "invoice_issued", "invoice", invoice_id, f"{actor['role']} issued quote; stock deducted atomically")
         for line in lines:
             audit(db, "stock_deducted", "product", line["product_id"], f"{line['quantity']} units for invoice {invoice_id}")
         db.commit()
@@ -226,7 +246,7 @@ def issue_invoice(invoice_id: int):
 
 
 @app.post("/api/invoices/{invoice_id}/paid")
-def mark_paid(invoice_id: int):
+def mark_paid(invoice_id: int, actor: dict = Depends(require_role("manager"))):
     with closing(connect()) as db:
         cur = db.execute("UPDATE invoices SET status='paid',paid_at=? WHERE id=? AND status='issued'",
                          (datetime.now(timezone.utc).isoformat(timespec="seconds"), invoice_id))
@@ -235,13 +255,13 @@ def mark_paid(invoice_id: int):
             if not db.execute("SELECT 1 FROM invoices WHERE id=?", (invoice_id,)).fetchone():
                 raise HTTPException(404, "Invoice not found")
             raise HTTPException(409, "Only an issued invoice can be marked paid")
-        audit(db, "invoice_paid", "invoice", invoice_id, "Payment recorded")
+        audit(db, "invoice_paid", "invoice", invoice_id, f"{actor['role']} recorded payment")
         db.commit()
         return invoice_detail(db, invoice_id)
 
 
 @app.get("/api/report")
-def report(month: str = Query(regex=r"^\d{4}-\d{2}$")):
+def report(month: str = Query(regex=r"^\d{4}-\d{2}$"), _: dict = Depends(require_role("reader"))):
     with closing(connect()) as db:
         low = [dict(r) for r in db.execute("SELECT id,sku,name,stock,reorder_at FROM products WHERE active=1 AND stock<=reorder_at ORDER BY stock,name")]
         summary = db.execute("""
@@ -263,8 +283,8 @@ def home():
     items = "".join(f'<tr><td>{html.escape(p["sku"])}</td><td>{html.escape(p["name"])}</td><td>{p["stock"]}</td><td>R {p["unit_price_cents"]/100:,.2f}</td></tr>' for p in products()) or '<tr><td colspan="4" class="muted">Add your first product below.</td></tr>'
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Workshop · SME Manager</title><style>
     *{{box-sizing:border-box}}body{{margin:0;background:#101512;color:#edf4ed;font:15px/1.5 system-ui,sans-serif}}main{{max-width:1000px;margin:auto;padding:36px 20px}}.tag{{color:#89e1a5;font-size:12px;letter-spacing:.12em;font-weight:700}}h1{{font-size:clamp(30px,5vw,46px);margin:8px 0}}p,.muted{{color:#9bab9e}}section{{background:#19231d;border:1px solid #314638;border-radius:15px;padding:20px;margin:16px 0}}h2{{font-size:18px;margin:0 0 14px}}form{{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}}input,button{{font:inherit;padding:10px;border-radius:8px;border:1px solid #395043;background:#101a14;color:#edf4ed}}button{{background:#89e1a5;color:#132218;border:0;font-weight:700;cursor:pointer}}table{{width:100%;border-collapse:collapse}}td,th{{padding:10px;border-bottom:1px solid #314638;text-align:left}}th{{color:#9bab9e;font-size:12px}}@media(max-width:650px){{form{{grid-template-columns:1fr 1fr}}}}
-    </style></head><body><main><div class="tag">WORKSHOP · LOCAL BUSINESS DEMO</div><h1>Operations, in one view.</h1><p>Products, customers, and invoice workflows for a fictional small business.</p><section><h2>Products and stock</h2><div style="overflow:auto"><table><thead><tr><th>SKU</th><th>Product</th><th>Stock</th><th>Price</th></tr></thead><tbody>{items}</tbody></table></div></section>
+    </style></head><body><main><div class="tag">WORKSHOP · LOCAL BUSINESS DEMO</div><h1>Operations, in one view.</h1><p>Products, customers, and invoice workflows for a fictional small business. Configure role keys to restrict the API.</p><section><label for="apiKey">Manager API key (only needed when keys are configured)</label><input id="apiKey" type="password" autocomplete="off"></section><section><h2>Products and stock</h2><div style="overflow:auto"><table><thead><tr><th>SKU</th><th>Product</th><th>Stock</th><th>Price</th></tr></thead><tbody>{items}</tbody></table></div></section>
     <section><h2>Add a product</h2><form id="product"><input name="sku" placeholder="SKU" required><input name="name" placeholder="Product name" required><input name="price" type="number" min="0" step="0.01" placeholder="Unit price (R)" required><input name="stock" type="number" min="0" step="1" placeholder="Opening stock" required><input name="reorder" type="number" min="0" step="1" placeholder="Reorder below"><button>Add product</button></form></section>
     <section><h2>API workflows</h2><p>Create a customer at <code>POST /api/customers</code>, create a quote at <code>POST /api/invoices</code>, then issue it using <code>POST /api/invoices/{'{invoice_id}'}/issue</code>. Issuing checks stock and deducts it in one database transaction.</p><a style="color:#89e1a5" href="/docs">Open the API reference</a></section></main><script>
-    document.getElementById('product').onsubmit=async ev=>{{ev.preventDefault();const f=ev.target;const b={{sku:f.sku.value,name:f.name.value,unit_price_cents:Math.round(Number(f.price.value)*100),stock:Number(f.stock.value),reorder_at:Number(f.reorder.value||0)}};const r=await fetch('/api/products',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(b)}});if(r.ok)location.reload();else alert((await r.json()).detail||'Could not save product')}}
+    document.getElementById('product').onsubmit=async ev=>{{ev.preventDefault();const f=ev.target;const b={{sku:f.sku.value,name:f.name.value,unit_price_cents:Math.round(Number(f.price.value)*100),stock:Number(f.stock.value),reorder_at:Number(f.reorder.value||0)}};const r=await fetch('/api/products',{{method:'POST',headers:{{'Content-Type':'application/json','X-API-Key':document.getElementById('apiKey').value}},body:JSON.stringify(b)}});if(r.ok)location.reload();else alert((await r.json()).detail||'Could not save product')}}
     </script></body></html>'''

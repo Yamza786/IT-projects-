@@ -3,17 +3,7 @@ name: Polymath Enterprise container
 on:
   push:
     branches: [integration/fastapi, main]
-    paths:
-      - 'polymath-enterprise/**'
-      - 'devops-demo/**'
-      - 'requirements-termux.txt'
-      - '.github/workflows/enterprise-container.yml'
   pull_request:
-    paths:
-      - 'polymath-enterprise/**'
-      - 'devops-demo/**'
-      - 'requirements-termux.txt'
-      - '.github/workflows/enterprise-container.yml'
 
 jobs:
   portfolio-workflows:

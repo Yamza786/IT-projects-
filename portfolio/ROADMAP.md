@@ -10,7 +10,7 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 ## Stage 2 — practical applications
 
 - **03 Personal Finance and Wealth Analytics — usable first release:** local rand-based ledger, budgets, savings goals, debt balances/payments, monthly cash-flow/savings-rate summary, net-worth snapshots, and explicitly assumption-based scenarios. Next: transaction edits and exports.
-- **04 SME Business Management System — usable first release:** local products, customers, draft quotes, atomic stock-check and invoice issue, paid-status transitions, audit events, stock adjustment ledger, and low-stock/revenue report. Next: role permissions, quotation editing, and exports.
+- **04 SME Business Management System — usable first release:** local products, customers, draft quotes, atomic stock-check and invoice issue, paid-status transitions, role keys, audit events, stock adjustment ledger, and low-stock/revenue report. Next: quotation editing and exports.
 - **09 E-commerce and Booking Platform — usable first release:** service catalogue, timezone-aware availability slots, scrypt-backed accounts, expiring/revocable sessions, own-booking view/cancellation, admin-key protected management, overlap prevention, and in-memory request throttles. Next: account verification, configurable calendars, and payment sandbox.
 
 ## Stage 3 — specialisation

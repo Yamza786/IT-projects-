@@ -83,6 +83,16 @@ def test_sme_quote_issue_deducts_stock_atomically(tmp_path):
         assert client.get("/api/products").json()[0]["stock"] == 1
 
 
+def test_sme_role_keys_enforce_reader_manager_admin(tmp_path):
+    with open_app(tmp_path, "sme-manager", "test_sme_roles") as (client,module):
+        module.ROLE_KEYS={"reader":"sme-reader","manager":"sme-manager","admin":"sme-admin"}
+        assert client.get("/api/products").status_code==401
+        assert client.post("/api/customers",json={"name":"No access"},headers={"X-API-Key":"sme-reader"}).status_code==403
+        assert client.post("/api/customers",json={"name":"Allowed"},headers={"X-API-Key":"sme-manager"}).status_code==201
+        assert client.get("/api/audit",headers={"X-API-Key":"sme-manager"}).status_code==403
+        assert client.get("/api/audit",headers={"X-API-Key":"sme-admin"}).status_code==200
+
+
 def test_security_analyzer_flags_and_suppresses_documentation_ip():
     spec = importlib.util.spec_from_file_location("test_security_cli", ROOT / "security-log-analyzer" / "analyze.py")
     module = importlib.util.module_from_spec(spec)
