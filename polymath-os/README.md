@@ -39,11 +39,10 @@ By default the database is `polymath.db` in the current directory. Set `POLYMATH
 - `GET|POST /api/reminders`, `POST /api/reminders/{id}/complete`
 - `GET /api/analytics`, `GET /api/export`
 
-## Next development steps
+## Data editing and restore
 
-1. Add editing and archive flows, plus export and import.
-2. Add recurring reminders and richer progress analytics.
-3. Add PostgreSQL support and authentication before any hosted deployment.
-4. Add an optional knowledge graph view connecting notes, goals, and projects.
+Goals, projects, and notes have editing endpoints. Download a JSON workspace from `GET /api/export/download`; import a compatible backup with `POST /api/import` only into a fresh database. Import is intentionally refused when the database already has records. Back up the SQLite file separately before upgrades.
 
-This is a portfolio and learning project, not a substitute for a backup system. Keep the database file private and back it up before upgrades.
+## Limits
+
+This is a single-user, local portfolio application. It has no login or synchronization and should not be exposed publicly with personal data. For architecture and trade-offs shared across the portfolio, see [the architecture guide](../portfolio/ARCHITECTURE.md) and [the roadmap](../portfolio/ROADMAP.md).

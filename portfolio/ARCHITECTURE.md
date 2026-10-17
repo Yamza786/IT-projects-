@@ -1,0 +1,31 @@
+# Portfolio architecture and decisions
+
+This portfolio keeps the 15 applications independently runnable. Each is a learning-scale product with a bounded purpose, local data by default, and project-specific security limits. The shared workflow suite lives in [`../tests/test_portfolio_projects.py`](../tests/test_portfolio_projects.py); the delivery status and known release checks are in [`ROADMAP.md`](ROADMAP.md).
+
+## Project decisions
+
+| # | Project and architecture | Decision and trade-off |
+|---|---|---|
+| 01 | [Polymath OS](../polymath-os/README.md) uses a FastAPI JSON API, server-rendered HTML, and SQLite for goals, projects, notes, habits, links, and reminders. | Local-first storage avoids accounts and external services. JSON restore only runs against an empty workspace to avoid silently replacing existing data. |
+| 02 | [Research Assistant](../research-assistant/README.md) stores bounded text documents in SQLite, ranks passages lexically, returns source-linked excerpts, and can optionally send retrieved excerpts to a configured chat endpoint. | Retrieval remains available offline; generation is opt-in because source text leaves the machine when a remote endpoint is configured. Lexical ranking is transparent but is not semantic search. |
+| 03 | [Personal Finance](../personal-finance/README.md) models money as integer cents in a local SQLite ledger and computes reports from recorded transactions and snapshots. | No bank credentials or live market data are involved. Scenario outputs are hypothetical and user-entered net-worth snapshots can be stale. |
+| 04 | [SME Manager](../sme-manager/README.md) uses SQLite transactions for quote-to-invoice stock deduction, plus explicit role keys and an audit/stock ledger. | Atomic transactions protect stock consistency in one local instance. The demo does not provide multi-instance coordination or hosted identity management. |
+| 05 | [Security Log Analyzer](../security-log-analyzer/README.md) is an offline CLI that parses common SSH/PAM records and emits a hashed, structured event report. | A small transparent ruleset keeps analysis auditable and avoids network actions. It covers authentication patterns only and requires human triage. |
+| 06 | [Adaptive Learning](../adaptive-learning/README.md) stores instructor-authored lessons, quiz attempts, topic suggestions, and review dates in SQLite. | Suggestions use explainable missed-answer counts, not a black-box model. Screen-reader and high-zoom manual checks remain necessary before release. |
+| 07 | [South African Open Data](../sa-open-data/README.md) validates tidy CSV input and writes a self-contained interactive HTML report with provenance. | Requiring provenance for real datasets helps preserve context; sample values are explicitly synthetic. A descriptive chart cannot establish causality. |
+| 08 | [Legal Research](../legal-research/README.md) stores matters, source records, linked passages, version metadata, and deadlines in a local searchable API/UI. | Source passages remain visible beside notes for traceability. It is an administration aid, not legal advice; avoid confidential material in the demo. |
+| 09 | [Booking Platform](../booking-platform/README.md) uses timezone-aware slots, SQLite overlap checks, scrypt passwords, expiring sessions, and a deterministic payment simulator. | The simulator never accepts card data or real money. Production payment processing requires a selected provider, its official sandbox, and verified webhooks. |
+| 10 | [Integration Hub](../integration-hub/README.md) validates versioned events, enforces scoped API keys, persists idempotency and rate buckets, and offers a resumable outbound webhook worker. | The local SQLite limiter is restart-safe for one process but is not a distributed gateway. Webhooks use HTTPS except loopback-only tests. |
+| 11 | [Accessible Portal](../accessible-portal/README.md) serves official-source catalogue entries by language and gates non-English content on recorded fluent review; editorial routes require an environment key. | English source verification and translation approval are separate records. The repository seed contains English only and makes no claim to provide reviewed translations. |
+| 12 | [Developer Toolkit](../developer-toolkit/README.md) provides standard-library CSV, file organization, backup, and streaming archive verification commands. | File moves are preview-first, source files are retained, and recovery validates paths and hashes. A checksum manifest detects accidental change but is not a signature. |
+| 13 | [DevOps Demonstrator](../devops-demo/README.md) builds the Polymath Enterprise image, runs as non-root, and includes hardened Compose, health checks, CI smoke deployment, and backup guidance. | CI proves build and container health, not cloud availability. A real launch needs persistent storage, TLS, secrets, monitoring, and tested host-specific recovery. |
+| 14 | [Contribution Portfolio](../contribution-portfolio/README.md) keeps an editable local JSON journal and generates Markdown for a human-reviewed showcase. | The tool does not fabricate, submit, or verify contributions. Entries must reflect work the contributor actually performed. |
+| 15 | [Polymath Enterprise](../polymath-enterprise/README.md) integrates SME workflows in a FastAPI/SQLite application with role keys, audit events, reports, project imports, and an idempotent event feed. | The capstone keeps data local and AI-free. SQLite and environment keys make the demo portable, while a public multi-user launch needs stronger identity, database, and operational controls. |
+
+## Cross-project boundaries
+
+- The applications use independent databases and configuration variables; running one does not implicitly share data with another.
+- Projects 02, 05, and 10 connect to the capstone only through explicit evidence import or event export workflows.
+- Synthetic data is the default. Use real information only when authorized and document provenance where the application supports it.
+- Deployment examples deliberately avoid committing credentials. Configure secrets at runtime and keep databases/backups out of source control.
+- The portfolio workflow tests exercise representative end-to-end paths. They do not replace manual accessibility review, production security review, or provider-specific payment testing.

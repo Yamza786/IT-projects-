@@ -1,47 +1,49 @@
-IT-projects-
+# IT-projects-
 
-A curated portfolio of small, well-documented projects and starter templates for demos, learning, and quick prototyping — focused on clarity, testability, and reproducible examples.
+A portfolio repository containing 15 practical, independently runnable applications alongside educational examples and starter templates. The 15-project suite demonstrates local-first product design, full-stack workflows, data analysis, defensive security, accessibility, integration, and deployment practice.
 
-Mission
--------
-Provide concise, practical, and well-tested reference implementations and scaffolds that help learners and engineers quickly understand concepts and bootstrap projects.
+## The 15-project portfolio
 
-Goals
-- Teach core concepts through minimal, readable examples (algorithms, ML from scratch).
-- Offer production-minded starters with CI, Docker, and pre-commit tooling (FastAPI template).
-- Provide safe, local learning labs (vuln-web-lab) for security practice.
-- Keep each project small, documented, and maintainable so contributors can learn quickly.
+| # | Project | Demonstrates |
+|---|---|---|
+| 01 | [Polymath OS](polymath-os/README.md) | Personal goals, notes, habits, graph, reminders, export and guarded restore |
+| 02 | [Research Assistant](research-assistant/README.md) | Document retrieval, source citations, evaluation, optional grounded generation |
+| 03 | [Personal Finance](personal-finance/README.md) | Rand ledger, budgets, debt, net worth, scenarios, exports |
+| 04 | [SME Manager](sme-manager/README.md) | Inventory, quotations, invoices, audit trails and reports |
+| 05 | [Security Log Analyzer](security-log-analyzer/README.md) | Offline SSH/PAM log parsing, rules, suppressions and incident reports |
+| 06 | [Adaptive Learning](adaptive-learning/README.md) | Lessons, quizzes, explainable practice recommendations and review schedule |
+| 07 | [South African Open Data](sa-open-data/README.md) | Validated CSV data, interactive reports and source provenance |
+| 08 | [Legal Research](legal-research/README.md) | Case/source organization, passage-linked notes, versions and deadlines |
+| 09 | [Booking Platform](booking-platform/README.md) | Accounts, timezone-aware availability, overlap checks and payment simulation |
+| 10 | [Integration Hub](integration-hub/README.md) | Versioned events, key scopes, idempotency, rate limits and webhooks |
+| 11 | [Accessible Services Portal](accessible-portal/README.md) | Multilingual catalogue, official sources and translation review gate |
+| 12 | [Developer Toolkit](developer-toolkit/README.md) | CSV utilities, preview-first file operations, verified backups |
+| 13 | [DevOps Demonstrator](devops-demo/README.md) | Hardened container, Compose, CI build and smoke deployment |
+| 14 | [Contribution Portfolio](contribution-portfolio/README.md) | Evidence-based contribution journal and showcase generation |
+| 15 | [Polymath Enterprise](polymath-enterprise/README.md) | Integrated SME workflows, roles, audit, analytics and event export |
 
-Audience
-- Learners, interview prep candidates, demo authors, and engineers who need minimal, extendable starters.
+The staged implementation record is in [portfolio/ROADMAP.md](portfolio/ROADMAP.md); architecture choices, trade-offs, and system boundaries are in [portfolio/ARCHITECTURE.md](portfolio/ARCHITECTURE.md). All projects are learning-scale examples. Their individual READMEs describe local setup, intended workflows, and limitations.
 
-Success criteria
-- Clear README and per-project documentation.
-- Passing CI on PRs and reproducible Docker builds.
-- Users able to run examples in under 10 minutes.
+## Verify the portfolio workflows
 
-Structure
-- algorithms-python — educational algorithm implementations and tests
-- fastapi-template — minimal FastAPI app scaffold with Dockerfile and CI
-- sys-admin-scripts — assorted sysadmin scripts and utilities
-- vuln-web-lab — local vulnerable web lab (docker-compose) for learning web security
-- ml-from-scratch — small ML algorithms implemented from scratch (linear regression, etc.)
-- polymath-os — local-first personal productivity and knowledge workspace
-- research-assistant — source-cited local document retrieval
-- personal-finance — rand-based personal budget and cash-flow analytics
-- sme-manager — inventory, customer, quote, and invoice workflow demo
-- security-log-analyzer — offline defensive SSH log triage
-- adaptive-learning — lesson quizzes and explainable revision suggestions
-- sa-open-data — CSV validation and interactive data reports
-- legal-research — case, source, note, and deadline organizer
-- booking-platform — service booking with overlap protection
-- integration-hub — scoped, rate-limited, idempotent versioned API
-- accessible-portal — reviewed multilingual public information catalogue
-- developer-toolkit — safe automation tools for CSVs, file sorting, and backups
-- devops-demo — non-root container, health check, and CI workflow
-- contribution-portfolio — local journal and Markdown showcase for OSS work
-- polymath-enterprise — integrated SME capstone with role checks and explainable reports
-- portfolio/ROADMAP.md — staged implementation status and follow-up work
+Use Python 3.12 or newer and install dependencies with `python -m pip install -r requirements-termux.txt`. Run the same suite as CI:
 
-How to contribute
-See CONTRIBUTING.md (added in repo-maintenance). If you want to propose changes to mission or goals, open a PR against integration/fastapi.
+```sh
+python -m pytest tests -q
+```
+
+The GitHub Actions workflow also validates the hardened Compose configuration, builds the container, and checks its health endpoint. These checks cover the documented demo workflows; manual accessibility, production security, and host-specific recovery reviews remain necessary before a public service launch.
+
+## Other repository projects
+
+- [algorithms-python](algorithms-python/README.md) — educational algorithms and tests
+- [fastapi-template](fastapi-template/README.md) — minimal application scaffold
+- [sys-admin-scripts](sys-admin-scripts/README.md) — systems administration utilities
+- [vuln-web-lab](vuln-web-lab/README.md) — intentionally vulnerable local security lab
+- [ml-from-scratch](ml-from-scratch/README.md) — introductory machine-learning implementations
+
+Do not deploy the vulnerable lab publicly. Keep credentials, private data, databases, and backups out of Git.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Changes to the portfolio suite should include focused workflow tests and documentation updates.
