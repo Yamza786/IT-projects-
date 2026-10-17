@@ -6,7 +6,7 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
-  await page.getByRole('heading', { name: 'IT/CS Portfolio' }).waitFor();
+  await page.getByRole('heading', { name: 'IT/CS Portfolio', exact: true }).waitFor();
   await page.locator('.card').first().waitFor();
   assert.equal(await page.locator('.card').count(), 25, 'renders all portfolio entries');
   assert.match(await page.locator('#count').innerText(), /Showing 25 of 25 projects/);
