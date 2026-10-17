@@ -34,6 +34,7 @@ def open_app(tmp_path: Path, project: str, module_name: str):
 
 def test_polymath_goal_note_graph_and_export(tmp_path):
     with open_app(tmp_path, "polymath-os", "test_polymath") as (client, _):
+        assert client.get("/").status_code == 200
         goal = client.post("/api/goals", json={"title": "Learn SQL"}).json()
         note = client.post("/api/notes", json={"title": "Joins", "body": "A join combines related rows."}).json()
         link = client.post("/api/links", json={"source_type": "goal", "source_id": goal["id"],
@@ -47,6 +48,7 @@ def test_polymath_goal_note_graph_and_export(tmp_path):
 def test_research_assistant_returns_cited_evidence(tmp_path):
     with open_app(tmp_path, "research-assistant", "test_research") as (client, module):
         module.LLM_URL = ""
+        assert client.get("/").status_code == 200
         created = client.post("/api/documents", json={"title": "Evidence notes", "source_uri": "archive:demo",
             "text": "A traceable source and publication date make a claim easier to verify. Correlation alone does not establish causation."})
         assert created.status_code == 201
@@ -58,6 +60,7 @@ def test_research_assistant_returns_cited_evidence(tmp_path):
 
 def test_finance_cashflow_and_debt_payment(tmp_path):
     with open_app(tmp_path, "personal-finance", "test_finance") as (client, _):
+        assert client.get("/").status_code == 200
         month = date.today().strftime("%Y-%m")
         client.post("/api/transactions", json={"kind": "income", "category": "Salary", "amount_cents": 200000})
         debt = client.post("/api/debts", json={"name": "Study loan", "balance_cents": 50000}).json()
@@ -71,6 +74,7 @@ def test_finance_cashflow_and_debt_payment(tmp_path):
 
 def test_sme_quote_issue_deducts_stock_atomically(tmp_path):
     with open_app(tmp_path, "sme-manager", "test_sme") as (client, _):
+        assert client.get("/").status_code == 200
         product = client.post("/api/products", json={"sku": "A-1", "name": "Notebook", "unit_price_cents": 2500, "stock": 3}).json()
         customer = client.post("/api/customers", json={"name": "Demo buyer"}).json()
         invoice = client.post("/api/invoices", json={"customer_id": customer["id"], "items":[{"product_id":product["id"],"quantity":2}]}).json()
@@ -107,6 +111,7 @@ def test_security_analyzer_flags_and_suppresses_documentation_ip():
 
 def test_learning_answer_schedules_next_review(tmp_path):
     with open_app(tmp_path, "adaptive-learning", "test_learning") as (client, _):
+        assert client.get("/").status_code == 200
         lesson = client.get("/api/lessons").json()[0]
         question = client.get(f"/api/lessons/{lesson['id']}/quiz").json()[0]
         response = client.post(f"/api/questions/{question['id']}/answer", json={"selected_index": 0})
@@ -116,6 +121,7 @@ def test_learning_answer_schedules_next_review(tmp_path):
 
 def test_legal_research_preserves_source_link_and_document_versions(tmp_path):
     with open_app(tmp_path, "legal-research", "test_legal") as (client, _):
+        assert client.get("/").status_code == 200
         case = client.post("/api/cases", json={"title":"Synthetic matter"}).json()
         source = client.post("/api/sources", json={"case_id":case["id"],"title":"Sample statute",
             "issuer":"Synthetic source","locator":"archive:law-1"}).json()
@@ -130,6 +136,7 @@ def test_legal_research_preserves_source_link_and_document_versions(tmp_path):
 def test_booking_requires_account_and_rejects_overlap(tmp_path, monkeypatch):
     monkeypatch.setenv("BOOKING_ADMIN_KEY", "unused-admin-key")
     with open_app(tmp_path, "booking-platform", "test_booking") as (client, module):
+        assert client.get("/").status_code == 200
         account = client.post("/api/accounts", json={"name":"Demo user","email":"demo@example.test","password":"long-demo-password"})
         assert account.status_code == 201
         login = client.post("/api/login", json={"email":"demo@example.test","password":"long-demo-password"}).json()
@@ -155,6 +162,7 @@ def test_integration_hub_idempotency(tmp_path):
 
 def test_portal_requires_https_source_and_serves_language_filter(tmp_path):
     with open_app(tmp_path, "accessible-portal", "test_portal") as (client, _):
+        assert client.get("/").status_code == 200
         payload={"slug":"demo-resource","language":"en","title":"Demo information","summary":"Synthetic text for accessibility review.",
                  "topic":"demo","source_title":"Synthetic publisher","source_url":"https://example.org/resource","verified_on":"2026-10-17"}
         assert client.post("/api/resources",json=payload).status_code==201
@@ -165,6 +173,7 @@ def test_portal_requires_https_source_and_serves_language_filter(tmp_path):
 
 def test_enterprise_roles_atomic_sale_and_security_import(tmp_path):
     with open_app(tmp_path, "polymath-enterprise", "test_enterprise") as (client,module):
+        assert client.get("/").status_code == 200
         module.KEYS={"reader":"reader-key","manager":"manager-key","admin":"admin-key"}
         reader={"X-API-Key":"reader-key"};manager={"X-API-Key":"manager-key"};admin={"X-API-Key":"admin-key"}
         assert client.post("/api/customers",json={"name":"Demo"},headers=reader).status_code==403
