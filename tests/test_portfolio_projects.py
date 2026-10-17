@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import zipfile
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -198,11 +199,40 @@ def test_csv_and_open_data_tools_validate_synthetic_inputs(tmp_path):
     assert count==1 and not issues
 
 
-def test_contribution_showcase_and_finance_scenario(tmp_path):
+def test_automation_preview_grouped_report_and_backup(tmp_path,monkeypatch):
+    source=tmp_path/"source";source.mkdir();(source/"notes.TXT").write_text("private demo",encoding="utf-8")
+    organizer_spec=importlib.util.spec_from_file_location("test_organizer",ROOT/"developer-toolkit"/"organize_files.py")
+    organizer=importlib.util.module_from_spec(organizer_spec);organizer_spec.loader.exec_module(organizer)
+    planned=organizer.plan(source)
+    assert planned[0][1].parent.name=="txt" and (source/"notes.TXT").exists()
+    monkeypatch.setattr(sys,"argv",["organize_files.py",str(source)])
+    assert organizer.main()==0 and (source/"notes.TXT").exists()
+
+    report_spec=importlib.util.spec_from_file_location("test_csv_report",ROOT/"developer-toolkit"/"csv_report.py")
+    report_module=importlib.util.module_from_spec(report_spec);report_spec.loader.exec_module(report_module)
+    csv_path=tmp_path/"hours.csv";csv_path.write_text("team,hours\nA,2.5\nA,1.5\nB,4\n",encoding="utf-8")
+    _,groups=report_module.summarize(csv_path,"team","hours")
+    assert groups[0]["sum"]==4 and groups[1]["mean"]==4
+
+    backup_spec=importlib.util.spec_from_file_location("test_backup",ROOT/"developer-toolkit"/"backup.py")
+    backup=importlib.util.module_from_spec(backup_spec);backup_spec.loader.exec_module(backup)
+    destination=tmp_path/"backups"
+    monkeypatch.setattr(sys,"argv",["backup.py",str(source),str(destination)])
+    assert backup.main()==0
+    archive=next(destination.glob("*.zip"))
+    with zipfile.ZipFile(archive) as zipped:
+        assert "notes.TXT" in zipped.namelist()
+    assert archive.with_suffix(".manifest.json").is_file()
+
+
+def test_contribution_showcase_and_finance_scenario(tmp_path,monkeypatch):
     spec=importlib.util.spec_from_file_location("test_contributions",ROOT/"contribution-portfolio"/"contributions.py")
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     markdown=module.markdown([{"project":"demo","date":"2026-10-17","summary":"Fixed a parser edge case","lesson":"Reproduced before editing","issue_url":"https://github.com/a/b/issues/1","pr_url":""}])
     assert "Fixed a parser edge case" in markdown and "issues/1" in markdown
+    module.DATA_PATH=tmp_path/"contributions.json"
+    monkeypatch.setattr(sys,"argv",["contributions.py","add","--project","demo","--issue-url","https://github.com/a/b/issues/2","--summary","Reproduced a bug","--lesson","Read the existing flow"])
+    assert module.main()==0 and json.loads(module.DATA_PATH.read_text())[0]["project"]=="demo"
     with open_app(tmp_path,"personal-finance","test_scenario") as (client,_):
         scenario=client.post("/api/scenarios",json={"initial_cents":0,"monthly_cents":10000,"annual_return_percent":0,"months":12}).json()
         assert scenario["projected_cents"]==120000
