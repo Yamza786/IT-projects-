@@ -4,7 +4,7 @@ import os
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import APIKeyHeader
 
-app = FastAPI()
+app = FastAPI(title="FastAPI Template", version="0.1.0")
 api_token_header = APIKeyHeader(name="X-API-Token", auto_error=False)
 
 
@@ -23,11 +23,21 @@ def require_api_token(token: str | None = Depends(api_token_header)) -> bool:
     return True
 
 
-@app.get('/')
+@app.get("/")
 async def root():
-    return {'message': 'FastAPI template is running'}
+    return {"message": "FastAPI template is running"}
 
 
-@app.get('/secure')
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.get("/ping")
+async def ping():
+    return {"ping": "pong"}
+
+
+@app.get("/secure")
 async def secure_route(auth: bool = Depends(require_api_token)):
-    return {'message': 'You are authorized'}
+    return {"message": "You are authorized"}

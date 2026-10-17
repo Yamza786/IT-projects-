@@ -1,42 +1,39 @@
-fastapi-template
+# FastAPI template
 
-Mission
--------
-Help developers boot a reliable FastAPI service with sensible defaults for development, testing, and deployment.
+A small, secure FastAPI starter with health and connectivity checks, token-protected example API, Docker support, and tests.
 
-Objectives
-- Provide a straightforward directory layout and a single, documented entrypoint (app.main:app).
-- Include CI to run linting and tests automatically on PRs.
-- Ship a small, secure Docker image and run instructions.
-- Encourage good developer ergonomics with pre-commit, formatter and linter rules.
+## Features
 
-Intended users
-- Developers starting a new microservice, instructors demonstrating modern Python API practices, or teams standardizing API scaffolding.
+- `GET /` service information
+- `GET /health` readiness check
+- `GET /ping` connectivity check
+- `GET /secure` example endpoint protected by an `X-API-Token` header
+- Dockerfile and test suite
 
-Success criteria
-- Green CI on new PRs, reproducible Docker build, and at least one example endpoint with tests.
+## Run locally
 
-Run locally (venv)
-
+```sh
+cd fastapi-template
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cp .env.example .env
+# Set API_TOKEN in .env to a long random value before using /secure.
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
 
-Docker build
+Visit `http://127.0.0.1:8000/docs` for interactive API documentation. The `/secure` endpoint returns `503` if the server token is not configured and `401` if the supplied token is missing or incorrect.
 
-docker build -t it-projects-fastapi:latest .
+## Run tests
 
-docker run -p 8000:8000 --env-file .env it-projects-fastapi:latest
-
-Copy `.env.example` to `.env` and set `API_TOKEN` to a long random value before
-starting the container. The `/secure` endpoint reads the token from the
-`X-API-Token` request header. It returns `503` when no server token is
-configured and `401` when the supplied token does not match.
-
-Tests
-
+```sh
 pip install -r requirements-dev.txt
 pytest -q
+```
 
-Note: Adjust the ASGI app import path in the Dockerfile/CMD if your application module path differs.
+## Build and run with Docker
+
+```sh
+docker build -t fastapi-template .
+docker run --rm -p 8000:80 --env-file .env fastapi-template
+```
