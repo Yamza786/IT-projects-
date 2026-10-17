@@ -18,3 +18,7 @@ __pycache__/
 hub-outbound-cursor.json
 devops-demo/.env.production
 contributions.json
+
+# JavaScript browser-test dependencies
+node_modules/
+**/node_modules/
