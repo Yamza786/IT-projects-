@@ -26,6 +26,8 @@ Structure
 - sys-admin-scripts — assorted sysadmin scripts and utilities
 - vuln-web-lab — local vulnerable web lab (docker-compose) for learning web security
 - ml-from-scratch — small ML algorithms implemented from scratch (linear regression, etc.)
+- polymath-os — local-first personal productivity and knowledge workspace
+- portfolio/ROADMAP.md — staged plan for the 15-project multidisciplinary portfolio
 
 How to contribute
 See CONTRIBUTING.md (added in repo-maintenance). If you want to propose changes to mission or goals, open a PR against integration/fastapi.
