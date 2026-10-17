@@ -135,9 +135,15 @@ async def import_text(request: Request, title: str = Query(min_length=1,max_leng
     content_type=request.headers.get("content-type","").split(";",1)[0].strip().lower()
     if content_type not in {"text/plain","text/markdown"}:
         raise HTTPException(415,"Use text/plain or text/markdown for .txt and .md imports")
-    raw=await request.body()
-    if not raw or len(raw)>100_000:
-        raise HTTPException(413 if raw else 422,"Imported document must contain 1–100,000 bytes")
+    chunks=[];total=0
+    async for chunk in request.stream():
+        total+=len(chunk)
+        if total>100_000:
+            raise HTTPException(413,"Imported document exceeds the 100,000-byte limit")
+        chunks.append(chunk)
+    raw=b"".join(chunks)
+    if not raw:
+        raise HTTPException(422,"Imported document must contain at least one byte")
     try:
         text=raw.decode("utf-8")
     except UnicodeDecodeError as exc:

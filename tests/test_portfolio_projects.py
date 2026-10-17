@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from html.parser import HTMLParser
 import json
+import re
 import sys
 import threading
 import zipfile
@@ -17,6 +19,30 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"developer-toolkit"))
+
+
+class MarkupAudit(HTMLParser):
+    def __init__(self):
+        super().__init__();self.ids=[];self.headings=[];self.buttons=[];self._button_depth=0;self._button_text=[]
+    def handle_starttag(self,tag,attrs):
+        attributes=dict(attrs)
+        if "id" in attributes:self.ids.append(attributes["id"])
+        if tag in {"h1","h2","h3"}:self.headings.append((tag,attributes))
+        if tag=="button":self._button_depth+=1;self._button_text=[]
+    def handle_data(self,data):
+        if self._button_depth:self._button_text.append(data)
+    def handle_endtag(self,tag):
+        if tag=="button" and self._button_depth:
+            self.buttons.append(" ".join(" ".join(self._button_text).split()));self._button_depth-=1
+
+
+def contrast_ratio(foreground: str, background: str) -> float:
+    def luminance(color):
+        rgb=[int(color[i:i+2],16)/255 for i in (1,3,5)]
+        channels=[value/12.92 if value<=0.04045 else ((value+0.055)/1.055)**2.4 for value in rgb]
+        return 0.2126*channels[0]+0.7152*channels[1]+0.0722*channels[2]
+    high,low=sorted((luminance(foreground),luminance(background)),reverse=True)
+    return (high+0.05)/(low+0.05)
 
 
 def load_module(project: str, module_name: str):
@@ -73,6 +99,8 @@ def test_research_assistant_returns_cited_evidence(tmp_path):
         imported=client.put("/api/documents/import-text",params={"title":"Imported notes","source_uri":"archive:notes"},
                             content=b"Markdown source with a verified note.",headers={"Content-Type":"text/markdown"})
         assert imported.status_code==201
+        too_large=client.put("/api/documents/import-text",params={"title":"Large notes"},content=b"x"*100_001,headers={"Content-Type":"text/plain"})
+        assert too_large.status_code==413
         evaluation=client.post("/api/evaluate",json={"cases":[{"question":"What makes a claim easier to verify?","relevant_document_ids":[created.json()["id"]]}],"k":3})
         assert evaluation.status_code==200 and evaluation.json()["mean_recall_at_k"]==1
         assert client.post("/api/evaluate",json={"cases":[{"question":"What makes a claim easier to verify?","relevant_document_ids":[99999]}]}).status_code==422
@@ -145,6 +173,23 @@ def test_learning_answer_schedules_next_review(tmp_path):
     with open_app(tmp_path, "adaptive-learning", "test_learning") as (client, _):
         page=client.get("/").text
         assert "Skip to lessons" in page and 'aria-live="polite"' in page and ":focus-visible" in page
+        markup=MarkupAudit();markup.feed(page)
+        assert len(markup.ids)==len(set(markup.ids))
+        assert sum(1 for tag,_ in markup.headings if tag=="h1")==1
+        assert markup.buttons and all(markup.buttons)
+        assert re.search(r'<a class="skip" href="#content">',page) and '<main id="content">' in page
+        assert "<fieldset><legend>" in page and '<label><input type="radio"' in page
+        body_match=re.search(r"body\{[^}]*background:(#[0-9a-fA-F]{6});color:(#[0-9a-fA-F]{6})",page)
+        para_match=re.search(r"p\{color:(#[0-9a-fA-F]{6})\}",page)
+        button_match=re.search(r"button\{background:(#[0-9a-fA-F]{6});color:(#[0-9a-fA-F]{6}|white)",page)
+        focus_match=re.search(r"outline:3px solid (#[0-9a-fA-F]{6})",page)
+        assert body_match and para_match and button_match and focus_match
+        page_bg,body_text=body_match.groups()
+        assert contrast_ratio(body_text,page_bg)>=4.5
+        assert contrast_ratio(para_match.group(1),page_bg)>=4.5
+        button_text="#ffffff" if button_match.group(2)=="white" else button_match.group(2)
+        assert contrast_ratio(button_text,button_match.group(1))>=4.5
+        assert contrast_ratio(focus_match.group(1),page_bg)>=3
         lesson = client.get("/api/lessons").json()[0]
         question = client.get(f"/api/lessons/{lesson['id']}/quiz").json()[0]
         response = client.post(f"/api/questions/{question['id']}/answer", json={"selected_index": 0})
@@ -352,13 +397,27 @@ def test_automation_preview_grouped_report_and_backup(tmp_path,monkeypatch):
     backup_spec=importlib.util.spec_from_file_location("test_backup",ROOT/"developer-toolkit"/"backup.py")
     backup=importlib.util.module_from_spec(backup_spec);backup_spec.loader.exec_module(backup)
     destination=tmp_path/"backups"
+    external=tmp_path/"outside.txt";external.write_text("outside source",encoding="utf-8")
+    (source/"external-link.txt").symlink_to(external)
     monkeypatch.setattr(sys,"argv",["backup.py",str(source),str(destination),"--log-jsonl",str(ops_log)])
     assert backup.main()==0
     assert json.loads(ops_log.read_text().splitlines()[-1])["event"]=="backup_created"
     archive=next(destination.glob("*.zip"))
     with zipfile.ZipFile(archive) as zipped:
         assert "notes.TXT" in zipped.namelist()
+        assert "external-link.txt" not in zipped.namelist()
     assert archive.with_suffix(".manifest.json").is_file()
+    assert json.loads(archive.with_suffix(".manifest.json").read_text())["source"]==source.name
+    verify_spec=importlib.util.spec_from_file_location("test_backup_verifier",ROOT/"developer-toolkit"/"verify_backup.py")
+    verifier=importlib.util.module_from_spec(verify_spec);verify_spec.loader.exec_module(verifier)
+    assert verifier.verify_archive(archive)["files"]==1
+    manifest=json.loads(archive.with_suffix(".manifest.json").read_text())
+    manifest["files"][0]["sha256"]="0"*64
+    tampered=tmp_path/"tampered.manifest.json";tampered.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError,match="SHA-256 mismatch"):
+        verifier.verify_archive(archive,tampered)
+    with pytest.raises(ValueError,match="Unsafe archive path"):
+        verifier.safe_member_name("../outside")
 
 
 def test_contribution_showcase_and_finance_scenario(tmp_path,monkeypatch):

@@ -48,7 +48,9 @@ Files with no extension go into `_no_extension`. Name collisions are skipped and
 python backup.py ~/Documents ~/Backups
 ```
 
-This creates a ZIP archive and a SHA-256 sidecar manifest. The source is read-only; the destination must be outside the source directory. Restore by extracting the archive with a standard ZIP utility.
+This creates a ZIP archive and a SHA-256 sidecar manifest. The source is read-only; the destination must be outside the source directory. Symlinks are not followed, and the manifest stores only the source folder name, not its absolute path.
+
+Verify the archive before recovery with `python verify_backup.py ~/Backups/source-YYYYMMDDTHHMMSSZ.zip`. It checks that the archive's paths and file list match the sidecar and streams every file to confirm its byte count and SHA-256 digest. It rejects traversal paths, duplicate names, special files, and archives larger than 5 GB. A manifest proves integrity against accidental changes only; it is not a signature.
 
 ## Design notes
 

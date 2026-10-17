@@ -31,7 +31,9 @@ def main() -> int:
         parser.error(f"source is not a directory: {source}")
     if destination == source or source in destination.parents:
         parser.error("destination must be outside the source directory")
-    files = sorted((p for p in source.rglob("*") if p.is_file()), key=lambda p: str(p).casefold())
+    all_paths=list(source.rglob("*"))
+    symlinks=sum(path.is_symlink() for path in all_paths)
+    files = sorted((p for p in all_paths if p.is_file() and not p.is_symlink()), key=lambda p: str(p).casefold())
     if not files:
         parser.error("source contains no files")
     destination.mkdir(parents=True, exist_ok=True)
@@ -45,7 +47,7 @@ def main() -> int:
                 bundle.write(path, arcname=relative)
                 manifest.append({"path": relative, "size": path.stat().st_size, "sha256": digest(path)})
         sidecar = archive.with_suffix(".manifest.json")
-        sidecar.write_text(json.dumps({"created_utc": stamp, "source": str(source), "files": manifest}, indent=2) + "\n", encoding="utf-8")
+        sidecar.write_text(json.dumps({"created_utc": stamp, "source": source.name, "files": manifest}, indent=2) + "\n", encoding="utf-8")
     except (OSError, zipfile.BadZipFile) as exc:
         if archive.exists():
             archive.unlink()
@@ -56,6 +58,8 @@ def main() -> int:
     print(f"Archive: {archive}")
     print(f"Manifest: {sidecar}")
     print(f"Files: {len(manifest)}")
+    if symlinks:
+        print(f"Skipped symlinks: {symlinks}")
     return 0
 
 

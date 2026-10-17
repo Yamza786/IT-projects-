@@ -9,6 +9,8 @@
 - Source attribution links have visible text, and lesson content remains available as ordinary HTML text.
 - The principal color pairs were calculated against the shipped CSS: body text on white 15.36:1; paragraph text on white 6.27:1; white button text on blue 6.04:1; blue tag text on page background 5.48:1; dark-blue focus outline on the page background 9.77:1. Text ratios exceed WCAG AA for normal text, and the focus indicator contrast exceeds 3:1.
 
+Automated markup checks in `tests/test_portfolio_projects.py` confirm unique IDs, a working skip-link target, one main heading, named buttons, the generated radio/fieldset pattern, polite feedback announcement, and minimum text/focus contrast ratios against the rendered CSS colors.
+
 ## Limits and manual release check
 
 This is a code and contrast review, not a certification. Before a public release, manually test keyboard-only operation, zoom/reflow at 200%, and at least one screen reader/browser pairing. Lesson authors remain responsible for meaningful headings, plain language, and accessible source documents.

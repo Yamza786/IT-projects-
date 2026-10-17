@@ -5,7 +5,7 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 ## Stage 1 — foundations
 
 - **01 Polymath OS — usable first release:** personal goals, projects, notes, habit check-ins/streaks, search, relationship graph, reminders, analytics, JSON export/import, editing endpoints, and local SQLite storage. Restore is restricted to a fresh workspace.
-- **12 Developer and Office Automation Toolkit — usable first release:** CSV audit, grouped Markdown reports, preview-first file sorting, ZIP backup with checksum manifest, structured JSONL operation logs for sorting/backups, and a documented recovery drill.
+- **12 Developer and Office Automation Toolkit — usable first release:** CSV audit, grouped Markdown reports, preview-first file sorting, ZIP backup with checksum manifest (without following symlinks or exposing absolute source paths), structured JSONL operation logs for sorting/backups, a streaming archive/path verifier, and a documented recovery drill.
 
 ## Stage 2 — practical applications
 
@@ -15,7 +15,7 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 
 ## Stage 3 — specialisation
 
-- **02 AI Research and Knowledge Assistant — usable retrieval release:** local text/Markdown imports, source metadata, lexical ranking, extractive summaries, deletion, unanswered-question tracking, an offline labeled retrieval evaluator that validates document labels, and optional explicitly configured grounded generation. Answer-quality still requires human review; generated output stays distinct from cited source passages.
+- **02 AI Research and Knowledge Assistant — usable retrieval release:** bounded local text/Markdown imports (100 KB), source metadata, lexical ranking, extractive summaries, deletion, unanswered-question tracking, an offline labeled retrieval evaluator that validates document labels, and optional explicitly configured grounded generation. Answer-quality still requires human review; generated output stays distinct from cited source passages.
 - **05 Cybersecurity Monitoring and Log Analyzer — usable CLI release:** SSH/PAM log parsing, configurable threshold/suppression rule packs, repeated-failure and success-after-failure alerts, source timeline, input hash, reviewed suppressions, response notes, and synthetic sample. Detection is heuristic and remains limited to authentication events.
 - **06 Adaptive Learning and Tutoring Platform — usable first release:** instructor-authored lessons with HTTPS source attribution and verification dates, quizzes, stored attempts, keyboard-accessible UI, measured WCAG AA text contrast, tag-based suggestions, and spaced review dates. Manual screen-reader and zoom testing remains a release check.
 - **08 Legal Research and Case Management Toolkit — usable first release:** matters, source records, passage-linked notes, searchable case/source/document/deadline records, versioned document metadata, and closable deadlines.
