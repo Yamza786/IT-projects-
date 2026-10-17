@@ -316,15 +316,27 @@ def test_integration_hub_idempotency(tmp_path):
     assert received[0][0]["external_id"]=="17" and received[0][1].startswith("hub-") and received[0][2]=="Bearer test-token"
 
 
-def test_portal_requires_https_source_and_serves_language_filter(tmp_path):
+def test_portal_requires_https_source_and_serves_language_filter(tmp_path, monkeypatch):
+    monkeypatch.setenv("PORTAL_EDITOR_KEY", "portal-test-key")
     with open_app(tmp_path, "accessible-portal", "test_portal") as (client, _):
         assert client.get("/").status_code == 200
+        editor={"X-Editor-Key":"portal-test-key"}
+        assert client.post("/api/resources",json={}).status_code==401
+        assert client.get("/api/translation-review-queue").status_code==401
         payload={"slug":"demo-resource","language":"en","title":"Demo information","summary":"Synthetic text for accessibility review.",
                  "topic":"demo","source_title":"Synthetic publisher","source_url":"https://example.org/resource","verified_on":"2026-10-17"}
-        assert client.post("/api/resources",json=payload).status_code==201
+        assert client.post("/api/resources",json=payload,headers=editor).status_code==201
         assert len(client.get("/api/resources",params={"language":"en"}).json())==1
         payload["slug"]="bad-link";payload["source_url"]="http://example.org/resource"
-        assert client.post("/api/resources",json=payload).status_code==422
+        assert client.post("/api/resources",json=payload,headers=editor).status_code==422
+        payload.update({"slug":"needs-fluent-review","language":"zu","title":"Ulwazi oluhloliwe",
+                       "summary":"Isishwankathelo esiguqulelwe ngumntu esilindele ukuhlolwa.","source_url":"https://example.org/isiZulu"})
+        draft=client.post("/api/resources",json=payload,headers=editor)
+        assert draft.status_code==201 and draft.json()["translation_status"]=="needs_review"
+        assert client.get("/api/resources",params={"language":"zu"}).json()==[]
+        assert client.get("/api/translation-review-queue",headers=editor).json()[0]["id"]==draft.json()["id"]
+        reviewed=client.post(f"/api/resources/{draft.json()['id']}/translation-review",json={"reviewer_id":"fluent-reviewer-1","reviewed_on":date.today().isoformat()},headers=editor)
+        assert reviewed.status_code==200 and len(client.get("/api/resources",params={"language":"zu"}).json())==1
     seed_spec=importlib.util.spec_from_file_location("test_portal_seed",ROOT/"accessible-portal"/"seed_resources.py")
     seed=importlib.util.module_from_spec(seed_spec);seed_spec.loader.exec_module(seed)
     db_path=tmp_path/"seeded-portal.db"
