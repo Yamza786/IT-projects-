@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import pytest
 
 spec=importlib.util.spec_from_file_location("password_lab",Path(__file__).with_name("password_lab.py"))
 password_lab=importlib.util.module_from_spec(spec)
@@ -16,6 +17,13 @@ def test_auto_backend_works_without_optional_packages():
     encoded=password_lab.hash_password("example passphrase")
     assert encoded.startswith(("$argon2", "$scrypt$"))
     assert password_lab.verify("example passphrase", encoded)
+
+def test_argon2id_backend_when_installed():
+    pytest.importorskip("argon2")
+    encoded=password_lab.hash_password("Argon2 test passphrase", "argon2")
+    assert encoded.startswith("$argon2id$")
+    assert password_lab.verify("Argon2 test passphrase", encoded)
+    assert not password_lab.verify("wrong passphrase", encoded)
 
 def test_unknown_hash_is_rejected():
     try:

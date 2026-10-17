@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Run the testing and password lab examples
-        run: python -m pip install pytest && python -m pytest -q software-testing-lab password-security-lab
+        run: python -m pip install pytest -r password-security-lab/requirements.txt && python -m pytest -q software-testing-lab password-security-lab
       - name: Build the mini cloud lab image
         run: docker build -t mini-cloud-lab:ci mini-cloud-lab
       - name: Run the mini cloud lab container
