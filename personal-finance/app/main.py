@@ -41,6 +41,18 @@ def initialize():
                 id INTEGER PRIMARY KEY, title TEXT NOT NULL, target_cents INTEGER NOT NULL CHECK(target_cents > 0),
                 saved_cents INTEGER NOT NULL DEFAULT 0 CHECK(saved_cents >= 0), due_date TEXT
             );
+            CREATE TABLE IF NOT EXISTS debts (
+                id INTEGER PRIMARY KEY, name TEXT NOT NULL, balance_cents INTEGER NOT NULL CHECK(balance_cents >= 0),
+                annual_interest_bps INTEGER NOT NULL DEFAULT 0 CHECK(annual_interest_bps BETWEEN 0 AND 10000), created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS debt_payments (
+                id INTEGER PRIMARY KEY, debt_id INTEGER NOT NULL REFERENCES debts(id), amount_cents INTEGER NOT NULL CHECK(amount_cents > 0),
+                day TEXT NOT NULL, memo TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS net_worth_snapshots (
+                id INTEGER PRIMARY KEY, day TEXT NOT NULL UNIQUE, assets_cents INTEGER NOT NULL CHECK(assets_cents >= 0),
+                liabilities_cents INTEGER NOT NULL CHECK(liabilities_cents >= 0), note TEXT NOT NULL DEFAULT ''
+            );
             CREATE INDEX IF NOT EXISTS txn_day_idx ON transactions(day);
         """)
         db.commit()
@@ -77,6 +89,25 @@ class ScenarioIn(BaseModel):
     monthly_cents: int = Field(ge=0)
     annual_return_percent: float = Field(ge=-100, le=100)
     months: int = Field(ge=1, le=1200)
+
+
+class DebtIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    balance_cents: int = Field(ge=0)
+    annual_interest_bps: int = Field(default=0, ge=0, le=10000)
+
+
+class DebtPaymentIn(BaseModel):
+    amount_cents: int = Field(gt=0)
+    day: date = Field(default_factory=date.today)
+    memo: str = Field(default="", max_length=500)
+
+
+class NetWorthIn(BaseModel):
+    day: date = Field(default_factory=date.today)
+    assets_cents: int = Field(ge=0)
+    liabilities_cents: int = Field(ge=0)
+    note: str = Field(default="", max_length=500)
 
 
 def money(cents: int) -> str:
@@ -130,6 +161,64 @@ def add_savings_goal(item: SavingsGoalIn):
                              (item.title.strip(), item.target_cents, item.saved_cents, item.due_date.isoformat() if item.due_date else None))
         db.commit()
         return dict(db.execute("SELECT * FROM savings_goals WHERE id=?", (cursor.lastrowid,)).fetchone())
+
+
+@app.get("/api/debts")
+def get_debts():
+    with closing(db_connect()) as db:
+        return [dict(row) for row in db.execute("SELECT * FROM debts ORDER BY id DESC")]
+
+
+@app.post("/api/debts", status_code=201)
+def add_debt(item: DebtIn):
+    with closing(db_connect()) as db:
+        cur = db.execute("INSERT INTO debts(name,balance_cents,annual_interest_bps,created_at) VALUES(?,?,?,?)",
+                         (item.name.strip(),item.balance_cents,item.annual_interest_bps,datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        db.commit()
+        return dict(db.execute("SELECT * FROM debts WHERE id=?",(cur.lastrowid,)).fetchone())
+
+
+@app.post("/api/debts/{debt_id}/payments", status_code=201)
+def pay_debt(debt_id: int, item: DebtPaymentIn):
+    with closing(db_connect()) as db:
+        db.execute("BEGIN IMMEDIATE")
+        debt = db.execute("SELECT * FROM debts WHERE id=?",(debt_id,)).fetchone()
+        if not debt:
+            db.rollback()
+            raise HTTPException(404,"Debt not found")
+        if item.amount_cents > debt["balance_cents"]:
+            db.rollback()
+            raise HTTPException(422,"Payment exceeds the tracked balance")
+        db.execute("UPDATE debts SET balance_cents=balance_cents-? WHERE id=?",(item.amount_cents,debt_id))
+        cur = db.execute("INSERT INTO debt_payments(debt_id,amount_cents,day,memo) VALUES(?,?,?,?)",
+                         (debt_id,item.amount_cents,item.day.isoformat(),item.memo.strip()))
+        # Repayments are included in cash outflow; the ledger does not infer principal/interest allocation.
+        db.execute("INSERT INTO transactions(kind,category,amount_cents,memo,day,created_at) VALUES('expense','Debt repayment',?,?,?,?)",
+                   (item.amount_cents,f"{debt['name']}: {item.memo.strip()}",item.day.isoformat(),datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        db.commit()
+        return {"payment_id":cur.lastrowid,"debt_id":debt_id,"remaining_balance_cents":debt["balance_cents"]-item.amount_cents}
+
+
+@app.get("/api/net-worth")
+def net_worth():
+    with closing(db_connect()) as db:
+        snapshots = [dict(row) for row in db.execute("SELECT * FROM net_worth_snapshots ORDER BY day DESC LIMIT 120")]
+    for snapshot in snapshots:
+        snapshot["net_worth_cents"] = snapshot["assets_cents"] - snapshot["liabilities_cents"]
+    return snapshots
+
+
+@app.post("/api/net-worth", status_code=201)
+def add_net_worth(item: NetWorthIn):
+    with closing(db_connect()) as db:
+        try:
+            cur = db.execute("INSERT INTO net_worth_snapshots(day,assets_cents,liabilities_cents,note) VALUES(?,?,?,?)",
+                             (item.day.isoformat(),item.assets_cents,item.liabilities_cents,item.note.strip()))
+            db.commit()
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409,"A snapshot already exists for that date") from exc
+        return {"id":cur.lastrowid,"day":item.day.isoformat(),"assets_cents":item.assets_cents,
+                "liabilities_cents":item.liabilities_cents,"net_worth_cents":item.assets_cents-item.liabilities_cents}
 
 
 @app.get("/api/summary")

@@ -14,8 +14,10 @@ Open `/` for the booking form and `/docs` for the API. Set `BOOKING_DB` to move 
 ## Endpoints
 
 - `GET|POST /api/services`
+- `GET /api/availability?service_id=1&day=YYYY-MM-DD&timezone=Africa/Johannesburg`
 - `POST /api/bookings` — customer, service, and timezone-aware ISO start time
-- `GET /api/bookings`
-- `POST /api/bookings/{id}/cancel`
+- `GET /api/bookings` and `POST /api/bookings/{id}/cancel` — require `X-Admin-Key`
 
-Before public deployment, add authentication for administration, email verification, abuse controls, privacy and retention policies, and a payment provider sandbox if payments are needed.
+Set `BOOKING_ADMIN_KEY` before using service or booking administration. Public booking submissions are rate-limited in memory per client address. Availability is 09:00–17:00 local time in 30-minute slots; this is a demo rule, not a configurable calendar yet.
+
+Before public deployment, add customer accounts or email verification, persistent abuse controls, privacy and retention policies, and a payment provider sandbox if payments are needed.

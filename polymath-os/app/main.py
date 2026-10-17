@@ -50,6 +50,15 @@ def initialize() -> None:
                 id INTEGER PRIMARY KEY, habit_id INTEGER NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
                 day TEXT NOT NULL, UNIQUE(habit_id, day)
             );
+            CREATE TABLE IF NOT EXISTS links (
+                id INTEGER PRIMARY KEY, source_type TEXT NOT NULL, source_id INTEGER NOT NULL,
+                target_type TEXT NOT NULL, target_id INTEGER NOT NULL, label TEXT NOT NULL DEFAULT '',
+                UNIQUE(source_type,source_id,target_type,target_id), CHECK(source_type!=target_type OR source_id!=target_id)
+            );
+            CREATE TABLE IF NOT EXISTS reminders (
+                id INTEGER PRIMARY KEY, title TEXT NOT NULL, due_at TEXT NOT NULL,
+                entity_type TEXT, entity_id INTEGER, done INTEGER NOT NULL DEFAULT 0 CHECK(done IN (0,1)), created_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS notes_search_idx ON notes(title, body, tags);
         """)
         db.commit()
@@ -78,6 +87,21 @@ class NoteIn(BaseModel):
 
 class HabitIn(BaseModel):
     title: str = Field(min_length=1, max_length=100)
+
+
+class LinkIn(BaseModel):
+    source_type: Literal["goal", "project", "note"]
+    source_id: int = Field(gt=0)
+    target_type: Literal["goal", "project", "note"]
+    target_id: int = Field(gt=0)
+    label: str = Field(default="related to", max_length=100)
+
+
+class ReminderIn(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    due_at: datetime
+    entity_type: Literal["goal", "project", "note"] | None = None
+    entity_id: int | None = Field(default=None, gt=0)
 
 
 def rows(table: str, limit: int = 100) -> list[dict]:
@@ -109,10 +133,18 @@ def dashboard() -> dict:
         notes = [dict(r) for r in db.execute("SELECT * FROM notes ORDER BY id DESC LIMIT 5")]
         habits = [dict(r) for r in db.execute("""
             SELECT h.*, MAX(c.day) AS last_check_in,
-            SUM(CASE WHEN c.day >= ? THEN 1 ELSE 0 END) AS check_ins_7d
+            SUM(CASE WHEN c.day >= ? AND c.day <= ? THEN 1 ELSE 0 END) AS check_ins_7d
             FROM habits h LEFT JOIN check_ins c ON c.habit_id=h.id
             GROUP BY h.id ORDER BY h.id DESC
-        """, ((date.today() - timedelta(days=6)).isoformat(),))]
+        """, ((date.today() - timedelta(days=6)).isoformat(), date.today().isoformat()))]
+        for habit in habits:
+            checked = {date.fromisoformat(row[0]) for row in db.execute("SELECT day FROM check_ins WHERE habit_id=?",(habit["id"],))}
+            cursor_day = date.today() if date.today() in checked else date.today() - timedelta(days=1)
+            streak = 0
+            while cursor_day in checked:
+                streak += 1
+                cursor_day -= timedelta(days=1)
+            habit["current_streak"] = streak
     return {"goals": goals, "projects": projects, "notes": notes, "habits": habits}
 
 
@@ -163,6 +195,8 @@ def add_habit(item: HabitIn) -> dict:
 @app.post("/api/habits/{habit_id}/check-ins", status_code=201)
 def check_in(habit_id: int, day: date | None = None) -> dict:
     check_day = (day or date.today()).isoformat()
+    if day and day > date.today():
+        raise HTTPException(422, "A habit cannot be checked in for a future day")
     with closing(connect()) as db:
         if not db.execute("SELECT 1 FROM habits WHERE id=?", (habit_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Habit not found")
@@ -183,6 +217,104 @@ def search(q: str = Query(min_length=1, max_length=200)) -> dict:
             where = " OR ".join(f"{column} LIKE ?" for column in columns)
             found[table] = [dict(r) for r in db.execute(f"SELECT * FROM {table} WHERE {where} ORDER BY id DESC LIMIT 30", (term,) * len(columns))]
     return found
+
+
+def entity_exists(db, entity_type: str, entity_id: int) -> bool:
+    table = {"goal": "goals", "project": "projects", "note": "notes"}[entity_type]
+    return bool(db.execute(f"SELECT 1 FROM {table} WHERE id=?", (entity_id,)).fetchone())
+
+
+@app.post("/api/links", status_code=201)
+def add_link(item: LinkIn) -> dict:
+    if item.source_type == item.target_type and item.source_id == item.target_id:
+        raise HTTPException(422, "An item cannot link to itself")
+    with closing(connect()) as db:
+        if not entity_exists(db, item.source_type, item.source_id) or not entity_exists(db, item.target_type, item.target_id):
+            raise HTTPException(404, "One of the linked items was not found")
+        try:
+            cur = db.execute("INSERT INTO links(source_type,source_id,target_type,target_id,label) VALUES(?,?,?,?,?)",
+                             (item.source_type,item.source_id,item.target_type,item.target_id,item.label.strip()))
+            db.commit()
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409, "These items are already linked") from exc
+        return dict(db.execute("SELECT * FROM links WHERE id=?",(cur.lastrowid,)).fetchone())
+
+
+@app.get("/api/graph")
+def graph(q: str | None = Query(default=None, max_length=200)) -> dict:
+    tables = {"goal": "goals", "project": "projects", "note": "notes"}
+    nodes, edges = [], []
+    with closing(connect()) as db:
+        for kind, table in tables.items():
+            sql = f"SELECT id,title AS label FROM {table}"
+            params = ()
+            if q:
+                sql += " WHERE title LIKE ?"; params = (f"%{q.strip()}%",)
+            nodes.extend({"id":f"{kind}:{r['id']}","type":kind,"label":r["label"]} for r in db.execute(sql,params))
+        for row in db.execute("SELECT * FROM links ORDER BY id"):
+            edges.append({"source":f"{row['source_type']}:{row['source_id']}","target":f"{row['target_type']}:{row['target_id']}","label":row["label"]})
+    if q:
+        node_ids = {node["id"] for node in nodes}
+        edges = [edge for edge in edges if edge["source"] in node_ids or edge["target"] in node_ids]
+    return {"nodes":nodes,"edges":edges}
+
+
+@app.post("/api/reminders", status_code=201)
+def add_reminder(item: ReminderIn) -> dict:
+    if item.due_at.tzinfo is None or item.due_at.utcoffset() is None:
+        raise HTTPException(422, "due_at must include a timezone offset")
+    with closing(connect()) as db:
+        if item.entity_type and (item.entity_id is None or not entity_exists(db,item.entity_type,item.entity_id)):
+            raise HTTPException(404, "Linked item not found")
+        if item.entity_id is not None and item.entity_type is None:
+            raise HTTPException(422, "entity_type is required when entity_id is provided")
+        cur = db.execute("INSERT INTO reminders(title,due_at,entity_type,entity_id,created_at) VALUES(?,?,?,?,?)",
+                         (item.title.strip(),item.due_at.astimezone(timezone.utc).isoformat(timespec="seconds"),item.entity_type,item.entity_id,datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        db.commit()
+        return dict(db.execute("SELECT * FROM reminders WHERE id=?",(cur.lastrowid,)).fetchone())
+
+
+@app.get("/api/reminders")
+def get_reminders(include_done: bool = False) -> list[dict]:
+    sql = "SELECT * FROM reminders" + ("" if include_done else " WHERE done=0") + " ORDER BY due_at LIMIT 200"
+    with closing(connect()) as db:
+        return [dict(row) for row in db.execute(sql)]
+
+
+@app.post("/api/reminders/{reminder_id}/complete")
+def complete_reminder(reminder_id: int) -> dict:
+    with closing(connect()) as db:
+        cur = db.execute("UPDATE reminders SET done=1 WHERE id=? AND done=0", (reminder_id,))
+        if not cur.rowcount:
+            raise HTTPException(404, "Open reminder not found")
+        db.commit()
+        return dict(db.execute("SELECT * FROM reminders WHERE id=?", (reminder_id,)).fetchone())
+
+
+@app.get("/api/analytics")
+def analytics() -> dict:
+    with closing(connect()) as db:
+        counts = {table: db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                  for table in ("goals","projects","notes","habits","links")}
+        recent = db.execute("SELECT COUNT(*) FROM check_ins WHERE day>=?",((date.today()-timedelta(days=6)).isoformat(),)).fetchone()[0]
+        active = db.execute("SELECT COUNT(*) FROM goals WHERE status='active'").fetchone()[0]
+        notes_by_tag = db.execute("SELECT tags FROM notes WHERE tags!=''").fetchall()
+    tags = {}
+    for row in notes_by_tag:
+        for tag in row["tags"].split(","):
+            key = tag.strip().lower()
+            if key:
+                tags[key] = tags.get(key,0)+1
+    return {"counts":counts,"active_goals":active,"habit_check_ins_last_7_days":recent,
+            "most_used_note_tags":sorted(tags.items(),key=lambda pair:(-pair[1],pair[0]))[:10]}
+
+
+@app.get("/api/export")
+def export_data() -> dict:
+    tables = ("goals","projects","notes","habits","check_ins","links","reminders")
+    with closing(connect()) as db:
+        return {"format":"polymath-os-json-v1","exported_at":datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "data":{table:[dict(row) for row in db.execute(f"SELECT * FROM {table} ORDER BY id")] for table in tables}}
 
 
 def e(value: object) -> str:

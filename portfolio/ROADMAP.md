@@ -4,21 +4,21 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 
 ## Stage 1 — foundations
 
-- **01 Polymath OS — usable first release:** personal goals, projects, notes, habit check-ins, search, dashboard, and local SQLite storage. Next: editing, exports, reminders, and graph links.
-- **12 Developer and Office Automation Toolkit — usable first release:** CSV audit, preview-first file sorting, and ZIP backup with checksum manifest. Next: add report generation and structured operational logs.
+- **01 Polymath OS — usable first release:** personal goals, projects, notes, habit check-ins/streaks, search, relationship graph, reminders, analytics, JSON export, and local SQLite storage. Next: editing flows and import.
+- **12 Developer and Office Automation Toolkit — usable first release:** CSV audit, grouped Markdown reports, preview-first file sorting, and ZIP backup with checksum manifest. Next: structured operational logs and recovery guides.
 
 ## Stage 2 — practical applications
 
-- **03 Personal Finance and Wealth Analytics — usable first release:** local rand-based ledger, budgets, savings goals, monthly cash-flow/savings-rate summary, and explicitly assumption-based scenarios. Next: debt and net-worth snapshots, transaction edits, and exports.
+- **03 Personal Finance and Wealth Analytics — usable first release:** local rand-based ledger, budgets, savings goals, debt balances/payments, monthly cash-flow/savings-rate summary, net-worth snapshots, and explicitly assumption-based scenarios. Next: transaction edits and exports.
 - **04 SME Business Management System — usable first release:** local products, customers, draft quotes, atomic stock-check and invoice issue, paid-status transitions, audit events, and low-stock/revenue report. Next: quotation UI, role permissions, stock adjustments, and exports.
-- **09 E-commerce and Booking Platform — usable first release:** service catalogue, customer booking, timezone-aware starts, overlap prevention, cancellation, and no card handling. Next: account verification, availability rules, admin UI, and payment sandbox.
+- **09 E-commerce and Booking Platform — usable first release:** service catalogue, timezone-aware availability slots, overlap prevention, admin-key protected booking list/cancellation, rate-limited booking requests, and no card handling. Next: account verification, configurable calendars, and payment sandbox.
 
 ## Stage 3 — specialisation
 
-- **02 AI Research and Knowledge Assistant — usable retrieval release:** local document capture, source-passage citations, lexical ranking, and unanswered-question tracking. Next: document import formats, privacy controls, and retrieval evaluation; answer generation remains intentionally absent.
-- **05 Cybersecurity Monitoring and Log Analyzer — usable CLI release:** SSH log parsing, repeated-failure and success-after-failure alerts, JSON reports, and synthetic sample. Next: event timelines and configurable rule packs.
-- **06 Adaptive Learning and Tutoring Platform — usable first release:** reviewed sample lesson, quizzes, stored attempts, accessible UI, and tag-based revision recommendations. Next: lesson authoring, revision schedules, and richer accessibility review.
-- **08 Legal Research and Case Management Toolkit — usable first release:** matters, source records, passage-linked notes, and deadline API. Next: versioned document metadata, completion flow, and search.
+- **02 AI Research and Knowledge Assistant — usable retrieval release:** local document capture, source-passage citations, lexical ranking, extractive summaries, deletion, and unanswered-question tracking. Next: supported document imports, privacy controls, and retrieval evaluation; no generated answers are presented as evidence.
+- **05 Cybersecurity Monitoring and Log Analyzer — usable CLI release:** SSH log parsing, repeated-failure and success-after-failure alerts, source timeline, input hash, reviewed suppressions, response notes, and synthetic sample. Next: configurable rule packs and broader log formats.
+- **06 Adaptive Learning and Tutoring Platform — usable first release:** reviewed sample lesson, instructor-authored quizzes, stored attempts, accessible UI, tag-based suggestions, and spaced review dates. Next: lesson-source citations and richer accessibility review.
+- **08 Legal Research and Case Management Toolkit — usable first release:** matters, source records, passage-linked notes, versioned document metadata, and closable deadlines. Next: search and deeper document workflows.
 
 ## Stage 4 — professional engineering
 

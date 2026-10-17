@@ -16,7 +16,10 @@ Open `/` or `/docs`. Set `LEGAL_DB` to change the SQLite path. The included inte
 - `POST|GET /api/cases`
 - `POST|GET /api/sources`
 - `POST|GET /api/notes`
+- `POST|GET /api/documents` — record document versions and file hashes
 - `POST /api/deadlines`
+- `POST /api/deadlines/{id}/complete`
+- `POST /api/cases/{id}/close`
 - `GET /api/deadlines?from=YYYY-MM-DD&to=YYYY-MM-DD`
 
 Each source should include the issuing body, title, URL or collection identifier, publication date if known, and access date. Verify current law from an authoritative source.

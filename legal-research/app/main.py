@@ -32,6 +32,9 @@ def init():
                 title TEXT NOT NULL,issuer TEXT NOT NULL,locator TEXT NOT NULL DEFAULT '',published_on TEXT,accessed_on TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY,case_id INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
                 source_id INTEGER REFERENCES sources(id) ON DELETE SET NULL,claim TEXT NOT NULL,passage TEXT NOT NULL DEFAULT '',note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY,case_id INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,version INTEGER NOT NULL CHECK(version>0),locator TEXT NOT NULL DEFAULT '',sha256 TEXT NOT NULL DEFAULT '',
+                added_at TEXT NOT NULL,UNIQUE(case_id,title,version));
             CREATE TABLE IF NOT EXISTS deadlines(id INTEGER PRIMARY KEY,case_id INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
                 title TEXT NOT NULL,due_on TEXT NOT NULL,done INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL);
         """)
@@ -69,6 +72,14 @@ class DeadlineIn(BaseModel):
     case_id: int
     title: str = Field(min_length=1, max_length=200)
     due_on: date
+
+
+class DocumentIn(BaseModel):
+    case_id: int
+    title: str = Field(min_length=1, max_length=300)
+    version: int = Field(gt=0, le=10000)
+    locator: str = Field(default="", max_length=1000)
+    sha256: str = Field(default="", regex=r"^(?:[0-9a-fA-F]{64})?$")
 
 
 def all_rows(sql: str, params=()):
@@ -146,6 +157,47 @@ def add_deadline(item: DeadlineIn):
                          (item.case_id,item.title.strip(),item.due_on.isoformat(),datetime.now(timezone.utc).isoformat(timespec="seconds")))
         db.commit()
         return dict(db.execute("SELECT * FROM deadlines WHERE id=?", (cur.lastrowid,)).fetchone())
+
+
+@app.get("/api/documents")
+def documents(case_id: int | None = None):
+    if case_id is None:
+        return all_rows("SELECT * FROM documents ORDER BY case_id,title,version DESC")
+    return all_rows("SELECT * FROM documents WHERE case_id=? ORDER BY title,version DESC",(case_id,))
+
+
+@app.post("/api/documents", status_code=201)
+def add_document(item: DocumentIn):
+    with closing(connect()) as db:
+        if not db.execute("SELECT 1 FROM cases WHERE id=?",(item.case_id,)).fetchone():
+            raise HTTPException(404,"Case not found")
+        try:
+            cur=db.execute("INSERT INTO documents(case_id,title,version,locator,sha256,added_at) VALUES(?,?,?,?,?,?)",
+                            (item.case_id,item.title.strip(),item.version,item.locator.strip(),item.sha256.lower(),datetime.now(timezone.utc).isoformat(timespec="seconds")))
+            db.commit()
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(409,"That document version already exists") from exc
+        return dict(db.execute("SELECT * FROM documents WHERE id=?",(cur.lastrowid,)).fetchone())
+
+
+@app.post("/api/cases/{case_id}/close")
+def close_case(case_id: int):
+    with closing(connect()) as db:
+        cur=db.execute("UPDATE cases SET status='closed' WHERE id=? AND status='open'",(case_id,))
+        if not cur.rowcount:
+            raise HTTPException(404,"Open case not found")
+        db.commit()
+        return dict(db.execute("SELECT * FROM cases WHERE id=?",(case_id,)).fetchone())
+
+
+@app.post("/api/deadlines/{deadline_id}/complete")
+def complete_deadline(deadline_id: int):
+    with closing(connect()) as db:
+        cur=db.execute("UPDATE deadlines SET done=1 WHERE id=? AND done=0",(deadline_id,))
+        if not cur.rowcount:
+            raise HTTPException(404,"Open deadline not found")
+        db.commit()
+        return dict(db.execute("SELECT * FROM deadlines WHERE id=?",(deadline_id,)).fetchone())
 
 
 @app.get("/", response_class=HTMLResponse)

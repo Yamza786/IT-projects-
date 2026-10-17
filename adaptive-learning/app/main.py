@@ -7,7 +7,7 @@ import json
 import os
 import sqlite3
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -33,6 +33,8 @@ def init():
                 prompt TEXT NOT NULL, options TEXT NOT NULL, correct_index INTEGER NOT NULL, explanation TEXT NOT NULL, tag TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS attempts(id INTEGER PRIMARY KEY, question_id INTEGER NOT NULL REFERENCES questions(id),
                 selected_index INTEGER NOT NULL, is_correct INTEGER NOT NULL, created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS review_schedule(question_id INTEGER PRIMARY KEY REFERENCES questions(id) ON DELETE CASCADE,
+                interval_days INTEGER NOT NULL, ease REAL NOT NULL, repetitions INTEGER NOT NULL, due_on TEXT NOT NULL);
         """)
         if not db.execute("SELECT 1 FROM lessons LIMIT 1").fetchone():
             cur = db.execute("INSERT INTO lessons(title,body,tags) VALUES(?,?,?)", (
@@ -56,10 +58,39 @@ class AnswerIn(BaseModel):
     selected_index: int = Field(ge=0, le=20)
 
 
+class QuestionIn(BaseModel):
+    prompt: str = Field(min_length=5, max_length=500)
+    options: list[str] = Field(min_items=2, max_items=10)
+    correct_index: int = Field(ge=0, le=9)
+    explanation: str = Field(min_length=1, max_length=1000)
+    tag: str = Field(min_length=1, max_length=80)
+
+
+class LessonIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=20, max_length=12000)
+    tags: str = Field(default="", max_length=300)
+    questions: list[QuestionIn] = Field(min_items=1, max_items=100)
+
+
 @app.get("/api/lessons")
 def lessons():
     with closing(connect()) as db:
         return [dict(r) for r in db.execute("SELECT id,title,body,tags FROM lessons ORDER BY id")]
+
+
+@app.post("/api/lessons", status_code=201)
+def add_lesson(item: LessonIn):
+    for question in item.questions:
+        if len(question.options) < 2 or question.correct_index >= len(question.options):
+            raise HTTPException(422, "Each correct_index must point to an existing option")
+    with closing(connect()) as db:
+        cur = db.execute("INSERT INTO lessons(title,body,tags) VALUES(?,?,?)",(item.title.strip(),item.body.strip(),item.tags.strip()))
+        lesson_id=cur.lastrowid
+        db.executemany("INSERT INTO questions(lesson_id,prompt,options,correct_index,explanation,tag) VALUES(?,?,?,?,?,?)",
+                       [(lesson_id,q.prompt.strip(),json.dumps(q.options),q.correct_index,q.explanation.strip(),q.tag.strip()) for q in item.questions])
+        db.commit()
+        return {"id":lesson_id,"title":item.title.strip(),"question_count":len(item.questions)}
 
 
 @app.get("/api/lessons/{lesson_id}/quiz")
@@ -82,8 +113,31 @@ def answer(question_id: int, item: AnswerIn):
         correct = item.selected_index == question["correct_index"]
         db.execute("INSERT INTO attempts(question_id,selected_index,is_correct,created_at) VALUES(?,?,?,?)",
                    (question_id, item.selected_index, int(correct), datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        schedule=db.execute("SELECT * FROM review_schedule WHERE question_id=?",(question_id,)).fetchone()
+        interval, ease, repetitions = (schedule["interval_days"],schedule["ease"],schedule["repetitions"]) if schedule else (0,2.5,0)
+        if correct:
+            interval = 1 if repetitions == 0 else (6 if repetitions == 1 else round(interval * ease))
+            repetitions += 1
+            ease = min(3.0,ease+0.05)
+        else:
+            interval, repetitions, ease = 1, 0, max(1.3,ease-0.2)
+        due_on=(date.today()+timedelta(days=max(1,interval))).isoformat()
+        db.execute("INSERT INTO review_schedule(question_id,interval_days,ease,repetitions,due_on) VALUES(?,?,?,?,?) ON CONFLICT(question_id) DO UPDATE SET interval_days=excluded.interval_days,ease=excluded.ease,repetitions=excluded.repetitions,due_on=excluded.due_on",
+                   (question_id,interval,ease,repetitions,due_on))
         db.commit()
-        return {"correct": correct, "explanation": question["explanation"], "topic": question["tag"]}
+        return {"correct": correct, "explanation": question["explanation"], "topic": question["tag"],
+                "next_review_on":due_on,"interval_days":interval}
+
+
+@app.get("/api/review-due")
+def review_due():
+    with closing(connect()) as db:
+        return [{"question_id":r["id"],"lesson_title":r["lesson_title"],"prompt":r["prompt"],
+                 "tag":r["tag"],"due_on":r["due_on"]} for r in db.execute("""
+            SELECT q.id,l.title AS lesson_title,q.prompt,q.tag,s.due_on FROM review_schedule s
+            JOIN questions q ON q.id=s.question_id JOIN lessons l ON l.id=q.lesson_id
+            WHERE s.due_on<=? ORDER BY s.due_on,q.id
+        """,(date.today().isoformat(),))]
 
 
 @app.get("/api/progress")

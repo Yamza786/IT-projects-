@@ -19,4 +19,6 @@ Open <http://127.0.0.1:8000>; API docs are at `/docs`. Set `SME_DB` to choose th
 4. Issue the quote as an invoice; stock is checked and decremented atomically.
 5. Review low stock, invoice status, and paid revenue through the report endpoint.
 
+Stock adjustments are recorded with a reason in the stock ledger. Workflow changes appear in `/api/audit`.
+
 Prices are integer cents. The application records an audit event for stock changes and invoice issue/paid transitions.

@@ -17,6 +17,9 @@ Open <http://127.0.0.1:8000>; API docs are at `/docs`. Set `FINANCE_DB` to chang
 - `GET|POST /api/transactions`
 - `GET|POST /api/budgets`
 - `GET|POST /api/savings-goals`
+- `GET|POST /api/debts`, `POST /api/debts/{id}/payments`
+- `GET|POST /api/net-worth`
 - `POST /api/scenarios`
 
 Use synthetic data for demos and keep the database private. No bank connection or real investment products are involved.
+Debt payments are counted as cash outflows, but the app does not split principal from interest. Net-worth values are user-entered snapshots, not connected account balances.

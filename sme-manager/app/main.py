@@ -39,6 +39,8 @@ def initialize():
             CREATE TABLE IF NOT EXISTS invoice_items(id INTEGER PRIMARY KEY, invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
                 product_id INTEGER NOT NULL REFERENCES products(id), description TEXT NOT NULL, quantity INTEGER NOT NULL CHECK(quantity>0),
                 unit_price_cents INTEGER NOT NULL CHECK(unit_price_cents>=0));
+            CREATE TABLE IF NOT EXISTS stock_ledger(id INTEGER PRIMARY KEY,product_id INTEGER NOT NULL REFERENCES products(id),
+                delta INTEGER NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY, event TEXT NOT NULL, entity TEXT NOT NULL,
                 entity_id INTEGER NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS invoice_status_idx ON invoices(status,created_at);
@@ -75,6 +77,11 @@ class InvoiceIn(BaseModel):
     items: list[LineIn] = Field(min_items=1, max_items=100)
 
 
+class StockAdjustmentIn(BaseModel):
+    delta: int = Field(ge=-1_000_000, le=1_000_000)
+    reason: str = Field(min_length=3, max_length=300)
+
+
 def audit(db, event: str, entity: str, entity_id: int, detail: str):
     db.execute("INSERT INTO audit_log(event,entity,entity_id,detail,created_at) VALUES(?,?,?,?,?)",
                (event, entity, entity_id, detail, datetime.now(timezone.utc).isoformat(timespec="seconds")))
@@ -93,6 +100,9 @@ def add_product(item: ProductIn):
             cur = db.execute("INSERT INTO products(sku,name,unit_price_cents,stock,reorder_at) VALUES(?,?,?,?,?)",
                              (item.sku.strip().upper(), item.name.strip(), item.unit_price_cents, item.stock, item.reorder_at))
             audit(db, "product_created", "product", cur.lastrowid, f"SKU {item.sku.strip().upper()} created; opening stock {item.stock}")
+            if item.stock:
+                db.execute("INSERT INTO stock_ledger(product_id,delta,reason,created_at) VALUES(?,?,?,?)",
+                           (cur.lastrowid,item.stock,"opening stock",datetime.now(timezone.utc).isoformat(timespec="seconds")))
             db.commit()
             return dict(db.execute("SELECT * FROM products WHERE id=?", (cur.lastrowid,)).fetchone())
         except sqlite3.IntegrityError as exc:
@@ -110,6 +120,7 @@ def add_customer(item: CustomerIn):
     with closing(connect()) as db:
         cur = db.execute("INSERT INTO customers(name,email,phone,created_at) VALUES(?,?,?,?)",
                          (item.name.strip(), item.email.strip(), item.phone.strip(), datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        audit(db,"customer_created","customer",cur.lastrowid,"Customer record created")
         db.commit()
         return dict(db.execute("SELECT * FROM customers WHERE id=?", (cur.lastrowid,)).fetchone())
 
@@ -135,6 +146,39 @@ def create_invoice(item: InvoiceIn):
             db.rollback()
             raise
         return invoice_detail(db, invoice_id)
+
+
+@app.post("/api/products/{product_id}/adjustments", status_code=201)
+def adjust_stock(product_id: int, item: StockAdjustmentIn):
+    if item.delta == 0:
+        raise HTTPException(422,"Stock adjustment cannot be zero")
+    with closing(connect()) as db:
+        db.execute("BEGIN IMMEDIATE")
+        product=db.execute("SELECT * FROM products WHERE id=? AND active=1",(product_id,)).fetchone()
+        if not product:
+            db.rollback(); raise HTTPException(404,"Product not found")
+        if product["stock"]+item.delta<0:
+            db.rollback(); raise HTTPException(409,"Stock cannot become negative")
+        db.execute("UPDATE products SET stock=stock+? WHERE id=?",(item.delta,product_id))
+        db.execute("INSERT INTO stock_ledger(product_id,delta,reason,created_at) VALUES(?,?,?,?)",
+                   (product_id,item.delta,item.reason.strip(),datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        audit(db,"stock_adjusted","product",product_id,f"Stock delta {item.delta}: {item.reason.strip()}")
+        db.commit()
+        return dict(db.execute("SELECT * FROM products WHERE id=?",(product_id,)).fetchone())
+
+
+@app.get("/api/stock-ledger")
+def stock_ledger(product_id: int | None = None):
+    with closing(connect()) as db:
+        if product_id:
+            return [dict(r) for r in db.execute("SELECT * FROM stock_ledger WHERE product_id=? ORDER BY id DESC",(product_id,))]
+        return [dict(r) for r in db.execute("SELECT * FROM stock_ledger ORDER BY id DESC LIMIT 500")]
+
+
+@app.get("/api/audit")
+def get_audit(limit: int = Query(default=100,ge=1,le=500)):
+    with closing(connect()) as db:
+        return [dict(r) for r in db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?",(limit,))]
 
 
 def invoice_detail(db, invoice_id: int):

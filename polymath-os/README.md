@@ -6,6 +6,9 @@ A personal command centre for goals, projects, notes, habits, and study. This fi
 
 - Capture goals, projects, and searchable notes.
 - Record daily habits and see a recent activity streak.
+- Connect goals, projects, and notes in a searchable relationship graph.
+- Create and complete timezone-aware reminders.
+- Review activity counts and export all workspace data as JSON.
 - Review a dashboard of open work and recent notes.
 - Store data in a local SQLite database.
 - Use the JSON API directly or the built-in responsive web interface.
@@ -32,6 +35,9 @@ By default the database is `polymath.db` in the current directory. Set `POLYMATH
 - `GET|POST /api/habits`
 - `POST /api/habits/{habit_id}/check-ins`
 - `GET /api/search?q=...`
+- `GET /api/graph?q=...`, `POST /api/links`
+- `GET|POST /api/reminders`, `POST /api/reminders/{id}/complete`
+- `GET /api/analytics`, `GET /api/export`
 
 ## Next development steps
 

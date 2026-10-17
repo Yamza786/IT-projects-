@@ -85,6 +85,38 @@ def list_documents():
         return [dict(r) for r in db.execute("SELECT id,title,created_at,length(text) AS characters FROM documents ORDER BY id DESC")]
 
 
+@app.delete("/api/documents/{document_id}")
+def delete_document(document_id: int):
+    with closing(connect()) as db:
+        cur=db.execute("DELETE FROM documents WHERE id=?",(document_id,))
+        if not cur.rowcount:
+            raise HTTPException(404,"Document not found")
+        db.commit()
+    return {"deleted":document_id}
+
+
+@app.get("/api/documents/{document_id}/summary")
+def summarize_document(document_id: int, sentences: int = 5):
+    if not 1 <= sentences <= 12:
+        raise HTTPException(422,"sentences must be between 1 and 12")
+    with closing(connect()) as db:
+        doc=db.execute("SELECT id,title,text FROM documents WHERE id=?",(document_id,)).fetchone()
+    if not doc:
+        raise HTTPException(404,"Document not found")
+    parts=[part.strip() for part in re.split(r"(?<=[.!?])\s+",doc["text"]) if part.strip()]
+    if not parts:
+        return {"document_id":document_id,"title":doc["title"],"summary":"","method":"extractive sentence ranking"}
+    ranked=[]
+    for index,part in enumerate(parts):
+        terms=tokens(part)
+        score=len(terms)/max(len(part.split())**0.5,1)
+        ranked.append((score,index,part))
+    selected=sorted(sorted(ranked,key=lambda x:(-x[0],x[1]))[:sentences],key=lambda x:x[1])
+    return {"document_id":document_id,"title":doc["title"],"summary":" ".join(x[2] for x in selected),
+            "source_sentence_indices":[x[1]+1 for x in selected],
+            "method":"Extractive ranking by unique content-word density; verify against the original document."}
+
+
 @app.post("/api/ask")
 def ask(item: AskIn):
     query = tokens(item.question)

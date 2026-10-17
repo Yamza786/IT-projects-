@@ -14,6 +14,12 @@ Check headers, duplicate records, and incomplete rows:
 python csv_audit.py contacts.csv --required name,email --max-issues 20
 ```
 
+Create an aggregate Markdown report without including the source rows:
+
+```sh
+python csv_report.py timesheet.csv --group department --value hours --output weekly-report.md
+```
+
 Exit code is `0` when no issues are found, `1` when the CSV has issues, and `2` for an input or usage error. Values are not printed, so reports do not expose row contents.
 
 ## Organize files by extension
