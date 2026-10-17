@@ -1,0 +1,9 @@
+{
+  "name": "portfolio-browser-checks",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "axe-core": "4.14.0",
+    "playwright": "1.64.1"
+  }
+}

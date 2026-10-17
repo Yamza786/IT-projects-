@@ -32,7 +32,7 @@ Use Python 3.12 or newer and install dependencies with `python -m pip install -r
 python -m pytest tests -q
 ```
 
-The GitHub Actions workflow also validates the hardened Compose configuration, builds the container, and checks its health endpoint. These checks cover the documented demo workflows; manual accessibility, production security, and host-specific recovery reviews remain necessary before a public service launch.
+The GitHub Actions workflow also runs a Chromium accessibility/keyboard check, validates the hardened Compose configuration, builds the container, and checks its health endpoint. These checks cover the documented demo workflows; manual screen-reader, device zoom, production security, and host-specific recovery reviews remain necessary before a public service launch.
 
 ## Other repository projects
 

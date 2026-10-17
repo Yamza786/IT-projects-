@@ -6,6 +6,40 @@ on:
   pull_request:
 
 jobs:
+  adaptive-learning-accessibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install application dependencies
+        run: python -m pip install -r requirements-termux.txt
+      - name: Install pinned browser audit tools
+        working-directory: tests/browser
+        run: npm ci --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: tests/browser
+        run: npx playwright install --with-deps chromium
+      - name: Start the learning application
+        working-directory: adaptive-learning
+        run: |
+          LEARNING_DB="$RUNNER_TEMP/learning-accessibility.db" python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 > "$RUNNER_TEMP/learning-accessibility.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8765/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/learning-accessibility.log"
+          exit 1
+      - name: Check accessibility and keyboard workflow in Chromium
+        working-directory: tests/browser
+        env:
+          ADAPTIVE_BASE_URL: http://127.0.0.1:8765
+        run: node accessibility.mjs
+
   portfolio-workflows:
     runs-on: ubuntu-latest
     steps:
