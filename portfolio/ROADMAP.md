@@ -4,33 +4,33 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 
 ## Stage 1 — foundations
 
-- **01 Polymath OS — in progress:** personal goals, projects, notes, habit check-ins, search, dashboard, and local SQLite storage. Next: editing, exports, reminders, and graph links.
-- **12 Developer and Office Automation Toolkit — planned:** safe file and CSV tools, report generation, backup helpers, dry-run mode, logs, and usage examples.
+- **01 Polymath OS — usable first release:** personal goals, projects, notes, habit check-ins, search, dashboard, and local SQLite storage. Next: editing, exports, reminders, and graph links.
+- **12 Developer and Office Automation Toolkit — usable first release:** CSV audit, preview-first file sorting, and ZIP backup with checksum manifest. Next: add report generation and structured operational logs.
 
 ## Stage 2 — practical applications
 
-- **03 Personal Finance and Wealth Analytics — planned:** ZAR cash-flow ledger, budgets, savings goals, debts, net-worth snapshots, and assumption-based scenarios using synthetic sample data.
-- **04 SME Business Management System — planned:** products, stock movements, customers, quotations, invoices, role permissions, audit history, and sales reports.
-- **09 E-commerce and Booking Platform — planned:** catalogue or service availability, accounts, orders, admin workflow, duplicate-booking protection, and sandbox-only payments.
+- **03 Personal Finance and Wealth Analytics — usable first release:** local rand-based ledger, budgets, savings goals, monthly cash-flow/savings-rate summary, and explicitly assumption-based scenarios. Next: debt and net-worth snapshots, transaction edits, and exports.
+- **04 SME Business Management System — usable first release:** local products, customers, draft quotes, atomic stock-check and invoice issue, paid-status transitions, audit events, and low-stock/revenue report. Next: quotation UI, role permissions, stock adjustments, and exports.
+- **09 E-commerce and Booking Platform — usable first release:** service catalogue, customer booking, timezone-aware starts, overlap prevention, cancellation, and no card handling. Next: account verification, availability rules, admin UI, and payment sandbox.
 
 ## Stage 3 — specialisation
 
-- **02 AI Research and Knowledge Assistant — planned:** document ingestion, cited retrieval, privacy controls, and answer-quality evaluation.
-- **05 Cybersecurity Monitoring and Log Analyzer — planned:** sample-log ingestion, detection rules, searchable incidents, false-positive cases, and response notes.
-- **06 Adaptive Learning and Tutoring Platform — planned:** lessons, quizzes, spaced revision, progress tracking, and accessible learning flows.
-- **08 Legal Research and Case Management Toolkit — planned:** source-linked research notes, documents, versions, and deadline tracking with public or synthetic data.
+- **02 AI Research and Knowledge Assistant — usable retrieval release:** local document capture, source-passage citations, lexical ranking, and unanswered-question tracking. Next: document import formats, privacy controls, and retrieval evaluation; answer generation remains intentionally absent.
+- **05 Cybersecurity Monitoring and Log Analyzer — usable CLI release:** SSH log parsing, repeated-failure and success-after-failure alerts, JSON reports, and synthetic sample. Next: event timelines and configurable rule packs.
+- **06 Adaptive Learning and Tutoring Platform — usable first release:** reviewed sample lesson, quizzes, stored attempts, accessible UI, and tag-based revision recommendations. Next: lesson authoring, revision schedules, and richer accessibility review.
+- **08 Legal Research and Case Management Toolkit — usable first release:** matters, source records, passage-linked notes, and deadline API. Next: versioned document metadata, completion flow, and search.
 
 ## Stage 4 — professional engineering
 
-- **10 API and Integration Hub — planned:** documented, versioned APIs, authentication, permissions, rate limits, validation, and integration examples.
-- **13 Cloud Deployment and DevOps Demonstrator — planned:** container build, CI/CD, health checks, monitoring, backups, and deployment runbook for a portfolio app.
-- **14 Open-Source Contribution Portfolio — ongoing practice:** focused upstream fixes, issue reproduction, review notes, and contribution records.
+- **10 API and Integration Hub — usable first release:** versioned event ingestion, scoped keys, rate limits, validation, idempotency, and local event storage. Next: persistent gateway-level rate limits, credential rotation, and outbound adapters.
+- **13 Cloud Deployment and DevOps Demonstrator — container and CI ready:** non-root image, persistent data volume, health check, GitHub Actions build and smoke workflow, and deployment runbook. Next: a monitored deployment to a chosen host.
+- **14 Open-Source Contribution Portfolio — usable CLI release:** local contribution journal, validated issue/PR URLs, and Markdown showcase. Next: richer review and verification fields.
 
 ## Stage 5 — analysis, access, and integration
 
-- **07 South African Open-Data Intelligence Platform — planned:** sourced public datasets, data validation, interactive comparisons, and clear limits on inference.
-- **11 Accessible Multilingual Services Portal — planned:** cited public information, English plus selected South African languages, keyboard and screen-reader support, mobile layouts, and update dates.
-- **15 Polymath Enterprise — planned capstone:** integrate selected business, finance, AI, security, API, and deployment workflows for a fictional SME, with auditability and documented trade-offs.
+- **07 South African Open-Data Intelligence Platform — usable local report generator:** validates tidy CSVs and creates a standalone interactive area/year report. Sample values are synthetic; real datasets must document provenance, definitions, and limitations.
+- **11 Accessible Multilingual Services Portal — usable content catalogue:** ten South African language codes, HTTPS source records, verification dates, keyboard-accessible responsive browsing, and translation review guidance. No unverified service claims are seeded.
+- **15 Polymath Enterprise — usable API capstone:** customers, products, stock ledger, atomic sales, expenses, role-checked keys, audit records, monthly analytics, and robust expense anomaly candidates with explanations. Next: browser administration, export/backup, model integration only with explicit data controls, and production hardening.
 
 ## Delivery standard
 

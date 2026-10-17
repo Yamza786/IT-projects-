@@ -1,0 +1,137 @@
+"""Local document retrieval with excerpt-level citations and no generated claims."""
+
+from __future__ import annotations
+
+import html
+import os
+import re
+import sqlite3
+from contextlib import closing
+from datetime import datetime, timezone
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
+
+DB_PATH = Path(os.environ.get("RESEARCH_DB", "research.db"))
+app = FastAPI(title="Research and Knowledge Assistant", version="0.1.0")
+STOP = {"the", "and", "for", "that", "with", "from", "this", "what", "when", "where", "which", "does", "into", "about", "have", "are", "was"}
+
+
+def connect():
+    c = sqlite3.connect(DB_PATH)
+    c.row_factory = sqlite3.Row
+    return c
+
+
+def init():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with closing(connect()) as db:
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY,title TEXT NOT NULL,text TEXT NOT NULL,created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS unanswered(id INTEGER PRIMARY KEY,question TEXT NOT NULL,asked_at TEXT NOT NULL);
+        """)
+        db.commit()
+
+
+@app.on_event("startup")
+def startup():
+    init()
+
+
+class DocumentIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=100_000)
+
+
+class AskIn(BaseModel):
+    question: str = Field(min_length=3, max_length=1000)
+    limit: int = Field(default=5, ge=1, le=10)
+
+
+def tokens(text: str) -> set[str]:
+    return {word for word in re.findall(r"[\w'-]+", text.lower()) if len(word) > 2 and word not in STOP}
+
+
+def passages(text: str) -> list[str]:
+    # Keep paragraph boundaries and split long paragraphs into manageable excerpts.
+    result = []
+    for paragraph in re.split(r"\n\s*\n", text):
+        sentences = re.split(r"(?<=[.!?])\s+", paragraph.strip())
+        current = ""
+        for sentence in sentences:
+            if len(current) + len(sentence) > 900 and current:
+                result.append(current.strip())
+                current = ""
+            current += (" " if current else "") + sentence
+        if current.strip():
+            result.append(current.strip())
+    return result
+
+
+@app.post("/api/documents", status_code=201)
+def add_document(item: DocumentIn):
+    with closing(connect()) as db:
+        cur = db.execute("INSERT INTO documents(title,text,created_at) VALUES(?,?,?)",
+                         (item.title.strip(), item.text.strip(), datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        db.commit()
+        return {"id": cur.lastrowid, "title": item.title.strip()}
+
+
+@app.get("/api/documents")
+def list_documents():
+    with closing(connect()) as db:
+        return [dict(r) for r in db.execute("SELECT id,title,created_at,length(text) AS characters FROM documents ORDER BY id DESC")]
+
+
+@app.post("/api/ask")
+def ask(item: AskIn):
+    query = tokens(item.question)
+    if not query:
+        raise HTTPException(422, "Question needs searchable words")
+    ranked = []
+    with closing(connect()) as db:
+        docs = db.execute("SELECT id,title,text FROM documents ORDER BY id").fetchall()
+        for doc in docs:
+            chunks = passages(doc["text"])
+            doc_tokens = tokens(doc["text"])
+            for index, passage in enumerate(chunks):
+                words = tokens(passage)
+                overlap = query & words
+                if not overlap:
+                    continue
+                # Favor passages that cover more distinct query terms, with a small length penalty.
+                score = len(overlap) / len(query) + len(overlap) / max(len(words), 1) * 0.2
+                ranked.append({"document_id": doc["id"], "title": doc["title"], "passage_index": index + 1,
+                               "excerpt": passage[:900], "matched_terms": sorted(overlap), "score": round(score, 4),
+                               "coverage": round(len(query & doc_tokens) / len(query), 4)})
+        ranked.sort(key=lambda r: (-r["score"], r["document_id"], r["passage_index"]))
+        hits = ranked[:item.limit]
+        if not hits:
+            db.execute("INSERT INTO unanswered(question,asked_at) VALUES(?,?)",
+                       (item.question.strip(), datetime.now(timezone.utc).isoformat(timespec="seconds")))
+            db.commit()
+    return {"question": item.question, "answer": None if not hits else "Review these source passages; this tool does not generate an answer.",
+            "results": hits, "unanswered": not bool(hits),
+            "method": "sentence-level term overlap; relevance ranking is approximate"}
+
+
+@app.get("/api/unanswered")
+def unanswered():
+    with closing(connect()) as db:
+        return [dict(r) for r in db.execute("SELECT * FROM unanswered ORDER BY id DESC LIMIT 100")]
+
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    docs = "".join(f'<li>{html.escape(d["title"])} <small>({d["characters"]} characters)</small></li>' for d in list_documents()) or "<li>No documents yet.</li>"
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Margin · Research Assistant</title><style>
+    *{{box-sizing:border-box}}body{{margin:0;background:#f4f1e9;color:#252c29;font:16px/1.55 Georgia,serif}}main{{max-width:900px;margin:auto;padding:34px 20px}}.brand{{font:700 12px system-ui;color:#257061;letter-spacing:.13em}}h1{{font-size:clamp(32px,5vw,48px);margin:10px 0}}p{{color:#58635f}}section{{background:#fffdf8;border:1px solid #dfded4;border-radius:12px;padding:20px;margin:16px 0}}h2{{font-size:20px;margin:0 0 14px}}label{{font:600 13px system-ui;display:block;margin:10px 0 5px}}input,textarea,button{{font:inherit;border-radius:8px;padding:10px;border:1px solid #d1d5cc;width:100%}}textarea{{min-height:125px}}button{{width:auto;background:#257061;color:white;border:0;font:bold 14px system-ui;cursor:pointer}}.cite{{border-left:3px solid #62b7a2;padding:10px 14px;margin:12px 0;background:#f3f9f6}}small{{color:#66736d}}#results{{margin-top:14px}}a{{color:#257061}}
+    </style></head><body><main><div class="brand">MARGIN · SOURCE-FIRST RESEARCH</div><h1>Find the passage.<br>Check the source.</h1><p>Local document retrieval with visible citations and an explicit “no evidence found” outcome.</p>
+    <section><h2>Add a text document</h2><form id="doc"><label for="title">Document title</label><input id="title" name="title" required maxlength="200"><label for="text">Text</label><textarea id="text" name="text" required maxlength="100000"></textarea><p><button>Add document</button></p></form></section>
+    <section><h2>Ask a research question</h2><form id="ask"><label for="question">Question</label><input id="question" name="question" required minlength="3" maxlength="1000"><p><button>Find source passages</button></p></form><div id="results" aria-live="polite"></div></section>
+    <section><h2>Indexed documents</h2><ul>{docs}</ul></section><p><a href="/docs">API reference</a> · Search is approximate and does not replace reading original sources.</p></main><script>
+    document.getElementById('doc').onsubmit=async e=>{{e.preventDefault();const f=e.target;const r=await fetch('/api/documents',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{title:f.title.value,text:f.text.value}})}});if(r.ok)location.reload();else alert('Could not save document')}}
+    document.getElementById('ask').onsubmit=async e=>{{e.preventDefault();const q=e.target.question.value;const r=await fetch('/api/ask',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{question:q}})}});const d=await r.json();document.getElementById('results').innerHTML=d.results.length?d.results.map(x=>`<article class="cite"><small>Source: ${{esc(x.title)}} · document #${{x.document_id}} · passage ${{x.passage_index}}</small><p>${{esc(x.excerpt)}}</p><small>Matched terms: ${{esc(x.matched_terms.join(', '))}}</small></article>`).join(''):'<p>No matching passages. This question was saved for review.</p>'}}function esc(s){{return String(s).replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]))}}
+    </script></body></html>'''

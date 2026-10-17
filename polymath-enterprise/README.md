@@ -1,0 +1,35 @@
+# Polymath Enterprise
+
+An integrated, local-first small-business capstone combining customers, inventory, sales, expenses, reporting, and role-checked API access. The app writes an audit event for business changes and rejects sales that exceed available stock in a single SQLite transaction.
+
+Its explainable report finds possible expense outliers using the modified z-score (median absolute deviation). Each result includes the category baseline and score; it is a review prompt, not a fraud finding or an AI-generated conclusion. This local release avoids sending private business data to an external model.
+
+## Run
+
+```sh
+export ENTERPRISE_READER_KEY='use-a-long-random-value'
+export ENTERPRISE_MANAGER_KEY='use-a-different-long-random-value'
+export ENTERPRISE_ADMIN_KEY='use-another-long-random-value'
+python -m pip install -r ../requirements-termux.txt
+uvicorn app.main:app --reload
+```
+
+Open `/docs`. The database defaults to `enterprise.db`; set `ENTERPRISE_DB` to choose another path. Keep the API on a trusted local network and protect the database and backups. This is a portfolio capstone, not a production accounting or security system.
+
+## Roles
+
+- Reader key: read catalogue, report, and audit history.
+- Manager key: reader access plus customers, products, stock changes, sales, and expense entry.
+- Admin key: manager access plus audit-history access.
+
+Keys are read from environment variables and compared in memory; they are never stored in the database. Do not commit them.
+
+## Main workflows
+
+1. Create a customer and products with opening stock.
+2. Record a sale with one or more product quantities; inventory is deducted atomically.
+3. Record an operating expense in integer cents.
+4. Read monthly revenue, expenses, net operating balance, and category summaries.
+5. Review anomaly candidates and the evidence used to flag them.
+
+API calls use `X-API-Key`. Example body schemas are available in `/docs`.

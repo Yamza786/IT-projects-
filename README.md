@@ -27,7 +27,21 @@ Structure
 - vuln-web-lab — local vulnerable web lab (docker-compose) for learning web security
 - ml-from-scratch — small ML algorithms implemented from scratch (linear regression, etc.)
 - polymath-os — local-first personal productivity and knowledge workspace
-- portfolio/ROADMAP.md — staged plan for the 15-project multidisciplinary portfolio
+- research-assistant — source-cited local document retrieval
+- personal-finance — rand-based personal budget and cash-flow analytics
+- sme-manager — inventory, customer, quote, and invoice workflow demo
+- security-log-analyzer — offline defensive SSH log triage
+- adaptive-learning — lesson quizzes and explainable revision suggestions
+- sa-open-data — CSV validation and interactive data reports
+- legal-research — case, source, note, and deadline organizer
+- booking-platform — service booking with overlap protection
+- integration-hub — scoped, rate-limited, idempotent versioned API
+- accessible-portal — reviewed multilingual public information catalogue
+- developer-toolkit — safe automation tools for CSVs, file sorting, and backups
+- devops-demo — non-root container, health check, and CI workflow
+- contribution-portfolio — local journal and Markdown showcase for OSS work
+- polymath-enterprise — integrated SME capstone with role checks and explainable reports
+- portfolio/ROADMAP.md — staged implementation status and follow-up work
 
 How to contribute
 See CONTRIBUTING.md (added in repo-maintenance). If you want to propose changes to mission or goals, open a PR against integration/fastapi.
