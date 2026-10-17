@@ -8,7 +8,7 @@ services:
     env_file:
       - .env.production
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8000:10000"
     volumes:
       - enterprise-data:/data
     read_only: true
@@ -19,7 +19,7 @@ services:
     cap_drop:
       - ALL
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10000/health', timeout=2)"]
       interval: 30s
       timeout: 3s
       start_period: 10s

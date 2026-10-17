@@ -29,11 +29,11 @@ jobs:
       - name: Build container
         run: docker build -f devops-demo/Dockerfile -t polymath-enterprise:ci .
       - name: Start container
-        run: docker run -d --name enterprise -p 8000:8000 -v enterprise-ci-data:/data polymath-enterprise:ci
+        run: docker run -d --name enterprise -p 10000:10000 -v enterprise-ci-data:/data polymath-enterprise:ci
       - name: Wait for health endpoint
         run: |
           for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:8000/health; then exit 0; fi
+            if curl --fail --silent http://127.0.0.1:10000/health; then exit 0; fi
             sleep 2
           done
             docker logs enterprise

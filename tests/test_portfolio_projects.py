@@ -173,6 +173,7 @@ def test_learning_answer_schedules_next_review(tmp_path):
     with open_app(tmp_path, "adaptive-learning", "test_learning") as (client, _):
         page=client.get("/").text
         assert "Skip to lessons" in page and 'aria-live="polite"' in page and ":focus-visible" in page
+        assert 'id="quiz-title" tabindex="-1"' in page and ".focus()" in page
         markup=MarkupAudit();markup.feed(page)
         assert len(markup.ids)==len(set(markup.ids))
         assert sum(1 for tag,_ in markup.headings if tag=="h1")==1

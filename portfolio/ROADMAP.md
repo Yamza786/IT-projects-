@@ -23,7 +23,7 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 ## Stage 4 — professional engineering
 
 - **10 API and Integration Hub — usable first release:** versioned event ingestion, scoped comma-rotatable keys, persistent per-key rate buckets, validation, idempotency, local event storage, and an opt-in resumable HTTPS webhook dispatcher.
-- **13 Cloud Deployment and DevOps Demonstrator — container and CI ready:** non-root Polymath Enterprise image, hardened loopback Compose service, persistent data volume, health check, GitHub Actions build/config/smoke workflow, administrator-only backup export, backup script, and deployment runbook. A monitored live deployment requires selecting a host and configuring its secrets and persistent storage.
+- **13 Cloud Deployment and DevOps Demonstrator — container and CI ready:** non-root Polymath Enterprise image, hardened loopback Compose service, persistent data volume, health check, GitHub Actions build/config/smoke workflow, administrator-only backup export, backup script, and deployment runbook. A Render Blueprint now configures the service, health check, generated role secrets, and persistent disk; provisioning it requires a connected Render account and approval of the paid service cost.
 - **14 Open-Source Contribution Portfolio — usable CLI release:** local contribution journal, validated issue/PR URLs, Markdown showcase, review-state and verification fields.
 
 ## Stage 5 — analysis, access, and integration

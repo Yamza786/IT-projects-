@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: polymath-enterprise-yamza786
+    runtime: docker
+    plan: 0.1c-256mb
+    dockerfilePath: ./devops-demo/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    disk:
+      name: enterprise-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: ENTERPRISE_READER_KEY
+        generateValue: true
+      - key: ENTERPRISE_MANAGER_KEY
+        generateValue: true
+      - key: ENTERPRISE_ADMIN_KEY
+        generateValue: true

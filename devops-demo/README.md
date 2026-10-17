@@ -8,7 +8,7 @@ From the repository root:
 
 ```sh
 docker build -f devops-demo/Dockerfile -t polymath-enterprise:local .
-docker run --rm -p 8000:8000 -v polymath-enterprise-data:/data \
+docker run --rm -p 8000:10000 -v polymath-enterprise-data:/data \
   -e ENTERPRISE_READER_KEY='replace-me' \
   -e ENTERPRISE_MANAGER_KEY='replace-with-a-different-key' \
   -e ENTERPRISE_ADMIN_KEY='replace-with-another-key' polymath-enterprise:local
@@ -38,4 +38,10 @@ With `ENTERPRISE_ADMIN_KEY` available in the shell, run `devops-demo/backup.sh /
 3. Keep admin routes private and rotate the three distinct role keys through the host's secret manager.
 4. Review logs, update base images regularly, and alert on failed health checks and backup failures.
 
-No cloud credentials, public registry, or paid service is required by this demonstration.
+The local build and CI demonstration require no cloud credentials, public registry, or paid service. The container listens on port 10000 by default; Compose and the local run command publish that as port 8000 on the host.
+
+## Optional Render deployment
+
+The repository-root [`render.yaml`](../render.yaml) defines a single-instance Docker web service with `/health` checks, three platform-generated role secrets, and a 1 GB persistent disk mounted at `/data` for SQLite. It deploys new commits only after repository checks pass. To launch it, connect the private GitHub repository to Render, select the `integration/fastapi` branch, review the Blueprint resources and current billing estimate, then create the service in the Render dashboard. The service name can be changed there if it is already taken.
+
+This configuration requires a paid web-service plan because Render free web services cannot attach persistent disks. At the time this note was checked (2026-10-17), Render lists the selected 256 MB plan at $6/month and persistent disk storage at $0.25/GB/month; bandwidth or other account usage can add charges. Confirm the current total in Render before creating the service. A persistent disk is single-instance and causes a short service interruption during redeploys. See [Render pricing](https://render.com/pricing), [persistent disk requirements](https://render.com/docs/disks), and the [Blueprint specification](https://render.com/docs/blueprint-spec).
