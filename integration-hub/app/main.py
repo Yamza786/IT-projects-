@@ -11,7 +11,7 @@ import sqlite3
 import time
 from collections import defaultdict, deque
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -93,7 +93,7 @@ def ingest(source: str, item: EventIn, idempotency_key: str | None = Header(defa
             return {**dict(existing), "payload": json.loads(existing["payload"]), "replayed": True}
         try:
             cur = db.execute("INSERT INTO events(source,external_id,kind,occurred_at,payload,idempotency_key,received_at) VALUES(?,?,?,?,?,?,?)",
-                             (source,item.external_id,item.kind,item.occurred_at.isoformat(),payload,idempotency_key,datetime.utcnow().isoformat(timespec="seconds")+"Z"))
+                             (source,item.external_id,item.kind,item.occurred_at.isoformat(),payload,idempotency_key,datetime.now(timezone.utc).isoformat(timespec="seconds")))
             db.commit()
         except sqlite3.IntegrityError as exc:
             raise HTTPException(409, "An event with this source, external ID, and kind already exists") from exc

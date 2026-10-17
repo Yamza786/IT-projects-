@@ -1,6 +1,8 @@
 # Research and Knowledge Assistant
 
-A local document search tool that returns short, traceable evidence passages for a question. The first release uses sentence-level lexical retrieval rather than an embedding service or generative model. It never invents a prose answer: when it cannot find relevant passages, it says so and records the unanswered question for review.
+A local document search tool that returns short, traceable evidence passages for a question. Retrieval uses sentence-level lexical matching; when it cannot find relevant passages, it says so and records the unanswered question for review.
+
+An optional OpenAI-compatible local or HTTPS chat endpoint can generate a grounded answer from the retrieved passages. Generation is off unless both `RESEARCH_LLM_URL` and `RESEARCH_LLM_MODEL` are configured; `RESEARCH_LLM_KEY` is optional. Without it, the app returns citations and retrieval-only status. When configured, source excerpts are sent to that endpoint, so use a local model or only material approved for that provider.
 
 ## Run
 

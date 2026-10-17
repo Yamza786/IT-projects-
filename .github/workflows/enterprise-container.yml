@@ -16,6 +16,17 @@ on:
       - '.github/workflows/enterprise-container.yml'
 
 jobs:
+  portfolio-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install portfolio dependencies
+        run: python -m pip install -r requirements-termux.txt
+      - name: Run portfolio workflows
+        run: python -m pytest tests -q
   build-and-smoke:
     runs-on: ubuntu-latest
     steps:

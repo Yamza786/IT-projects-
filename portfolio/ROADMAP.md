@@ -15,7 +15,7 @@ The portfolio is developed in small, demonstrable releases. A project is called 
 
 ## Stage 3 — specialisation
 
-- **02 AI Research and Knowledge Assistant — usable retrieval release:** local document capture, source-passage citations, lexical ranking, extractive summaries, deletion, and unanswered-question tracking. Next: supported document imports, privacy controls, and retrieval evaluation; no generated answers are presented as evidence.
+- **02 AI Research and Knowledge Assistant — usable retrieval release:** local document capture, source metadata, lexical ranking, extractive summaries, deletion, unanswered-question tracking, and optional explicitly configured grounded generation. Next: supported document imports, retrieval evaluation, and answer-quality safeguards; generated output remains distinct from cited source passages.
 - **05 Cybersecurity Monitoring and Log Analyzer — usable CLI release:** SSH log parsing, repeated-failure and success-after-failure alerts, source timeline, input hash, reviewed suppressions, response notes, and synthetic sample. Next: configurable rule packs and broader log formats.
 - **06 Adaptive Learning and Tutoring Platform — usable first release:** reviewed sample lesson, instructor-authored quizzes, stored attempts, accessible UI, tag-based suggestions, and spaced review dates. Next: lesson-source citations and richer accessibility review.
 - **08 Legal Research and Case Management Toolkit — usable first release:** matters, source records, passage-linked notes, versioned document metadata, and closable deadlines. Next: search and deeper document workflows.
