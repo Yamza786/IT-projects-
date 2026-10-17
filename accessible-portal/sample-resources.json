@@ -1,0 +1,42 @@
+[
+  {
+    "slug": "south-africa-public-service-jobs",
+    "language": "en",
+    "title": "Find South African public service vacancies",
+    "summary": "The government jobs page links to the Public Service Vacancy Circular for advertised government posts and provides guidance for job seekers, including CV and interview preparation. Vacancy availability changes; follow the official circular for current listings.",
+    "topic": "employment",
+    "source_title": "South African Government — Jobs",
+    "source_url": "https://www.gov.za/jobs",
+    "verified_on": "2026-10-17"
+  },
+  {
+    "slug": "south-africa-find-a-job",
+    "language": "en",
+    "title": "Job-search guidance",
+    "summary": "The government information page provides job-hunting guidance and links to public-service vacancies, CV preparation, interview preparation, and employment information. Check the linked official sources for current requirements.",
+    "topic": "employment",
+    "source_title": "South African Government — Finding a job",
+    "source_url": "https://www.gov.za/issues/finding-job-0",
+    "verified_on": "2026-10-17"
+  },
+  {
+    "slug": "south-africa-education-services",
+    "language": "en",
+    "title": "Browse education services",
+    "summary": "The government education-services index links to school and tertiary education processes, including matric-result services, school admission information, NSFAS assistance, and tertiary-application services. Open the official pages for current eligibility and dates.",
+    "topic": "education",
+    "source_title": "South African Government — Education services",
+    "source_url": "https://www.gov.za/services/services-residents/education",
+    "verified_on": "2026-10-17"
+  },
+  {
+    "slug": "nsfas-how-to-apply",
+    "language": "en",
+    "title": "NSFAS application guidance",
+    "summary": "NSFAS explains how to create or access a myNSFAS profile, complete an application, provide supporting information, and track its status. Application windows and requirements can change; check the official page before acting. NSFAS states that applying is free.",
+    "topic": "education-funding",
+    "source_title": "National Student Financial Aid Scheme — How to apply",
+    "source_url": "https://www.nsfas.org.za/content/how-to-apply.html",
+    "verified_on": "2026-10-17"
+  }
+]

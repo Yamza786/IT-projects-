@@ -1,0 +1,109 @@
+name: Polymath Enterprise container
+
+on:
+  push:
+    branches: [integration/fastapi, main]
+  pull_request:
+
+jobs:
+  added-projects:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run the testing and password lab examples
+        run: python -m pip install pytest -r password-security-lab/requirements.txt && python -m pytest -q software-testing-lab password-security-lab
+      - name: Build the mini cloud lab image
+        run: docker build -t mini-cloud-lab:ci mini-cloud-lab
+      - name: Run the mini cloud lab container
+        run: |
+          docker run -d --name mini-cloud-lab -p 127.0.0.1:18090:8090 -v mini-cloud-ci:/data mini-cloud-lab:ci
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18090/health; then break; fi
+            sleep 1
+          done
+          python -c 'import json,urllib.request; base="http://127.0.0.1:18090"; assert json.load(urllib.request.urlopen(base+"/health"))["status"]=="ok"; assert json.load(urllib.request.urlopen(base+"/visits"))["visits"]==1; assert json.load(urllib.request.urlopen(base+"/visits"))["visits"]==2'
+          docker rm --force mini-cloud-lab
+  adaptive-learning-accessibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install application dependencies
+        run: python -m pip install -r requirements-termux.txt
+      - name: Install pinned browser audit tools
+        working-directory: tests/browser
+        run: npm ci --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: tests/browser
+        run: npx playwright install --with-deps chromium
+      - name: Start the learning application
+        working-directory: adaptive-learning
+        run: |
+          LEARNING_DB="$RUNNER_TEMP/learning-accessibility.db" python -m uvicorn app.main:app --host 127.0.0.1 --port 8765 > "$RUNNER_TEMP/learning-accessibility.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8765/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/learning-accessibility.log"
+          exit 1
+      - name: Check accessibility and keyboard workflow in Chromium
+        working-directory: tests/browser
+        env:
+          ADAPTIVE_BASE_URL: http://127.0.0.1:8765
+        run: node accessibility.mjs
+      - name: Start portfolio command center
+        run: python -m http.server 8766 --bind 127.0.0.1 --directory . > "$RUNNER_TEMP/portfolio-server.log" 2>&1 &
+      - name: Check portfolio command center in Chromium
+        working-directory: tests/browser
+        env:
+          PORTFOLIO_BASE_URL: http://127.0.0.1:8766/portfolio-command-center/
+        run: |
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent "$PORTFOLIO_BASE_URL" >/dev/null; then break; fi
+            sleep 1
+          done
+          node portfolio-command-center.mjs
+
+  portfolio-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install portfolio dependencies
+        run: python -m pip install -r requirements-termux.txt
+      - name: Run portfolio workflows
+        run: python -m pytest tests -q
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate hardened Compose configuration
+        run: |
+          cp devops-demo/.env.production.example devops-demo/.env.production
+          docker compose -f devops-demo/compose.yaml config --quiet
+          rm devops-demo/.env.production
+      - name: Build container
+        run: docker build -f devops-demo/Dockerfile -t polymath-enterprise:ci .
+      - name: Start container
+        run: docker run -d --name enterprise -p 10000:10000 -v enterprise-ci-data:/data polymath-enterprise:ci
+      - name: Wait for health endpoint
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:10000/health; then exit 0; fi
+            sleep 2
+          done
+            docker logs enterprise
+          exit 1
+      - name: Stop container
+        if: always()
+        run: docker rm --force enterprise || true

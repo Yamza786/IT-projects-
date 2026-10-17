@@ -1,0 +1,33 @@
+# API and Integration Hub
+
+Rate counters are stored in SQLite using per-key UTC minute buckets, so a process restart does not reset a key's current-minute allowance. Set comma-separated `HUB_WRITE_KEYS` and `HUB_READ_KEYS` values to overlap credentials during rotation; remove the retired key after clients have moved. Legacy single-key variables remain supported.
+
+A small versioned API that accepts records from source systems, validates them into a canonical event format, and deduplicates retries with an idempotency key. Its opt-in webhook dispatcher forwards events to a configured HTTPS endpoint, saves a resumable cursor after each successful delivery, and retries safely with the event idempotency key.
+
+## Run
+
+Set separate read and write API keys, then launch locally:
+
+```sh
+export HUB_READ_KEY='replace-with-a-long-random-value'
+export HUB_WRITE_KEY='replace-with-a-different-long-random-value'
+python -m pip install -r ../requirements-termux.txt
+uvicorn app.main:app --reload
+```
+
+Do not put real keys in source control. API keys are compared in memory and are not stored in the database; only SHA-256 fingerprints and per-minute counters are persisted. Persistent local counters are not a substitute for a production API gateway or a distributed limiter.
+
+## Example
+
+```sh
+curl -H "X-API-Key: $HUB_WRITE_KEY" -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: accounting-2026-00017' \
+  -d '{"external_id":"00017","kind":"invoice.paid","occurred_at":"2026-10-17T12:00:00Z","payload":{"invoice":"INV-17","total_cents":12500}}' \
+  http://127.0.0.1:8000/api/v1/integrations/accounting/events
+```
+
+Read accepted events with the read key at `GET /api/v1/events`. Reusing an idempotency key returns the original event.
+
+## Optional outbound webhook
+
+Set `HUB_OUTBOUND_URL` to a trusted HTTPS JSON endpoint, `HUB_READ_KEY` to a read key, and optionally `HUB_OUTBOUND_TOKEN` for a bearer token. Then run `python dispatch_webhook.py`. It reads events after the cursor in `HUB_OUTBOUND_CURSOR` (default `hub-outbound-cursor.json`), forwards them in order, and advances the cursor only after a successful response. Use `HUB_URL` for a non-default local hub. HTTP destinations are accepted only for loopback tests. The script does not follow redirects, so credentials are not forwarded to a redirect target. Protect the cursor and credentials; a webhook target receives business event payloads.
