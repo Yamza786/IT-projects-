@@ -1,0 +1,14 @@
+# Accessibility review
+
+## Reviewed UI affordances
+
+- The page uses a single main landmark, a skip link, hierarchical headings, and semantic lesson articles.
+- Quiz choices are generated as native radio inputs grouped in a `fieldset` with a `legend`; each choice is wrapped in its visible label.
+- Answer feedback is announced through a polite live region, and keyboard focus has a visible outline.
+- Text is 16 px by default and layouts reflow on narrow screens. Reduced-motion preferences disable smooth scrolling.
+- Source attribution links have visible text, and lesson content remains available as ordinary HTML text.
+- The principal color pairs were calculated against the shipped CSS: body text on white 15.36:1; paragraph text on white 6.27:1; white button text on blue 6.04:1; blue tag text on page background 5.48:1; dark-blue focus outline on the page background 9.77:1. Text ratios exceed WCAG AA for normal text, and the focus indicator contrast exceeds 3:1.
+
+## Limits and manual release check
+
+This is a code and contrast review, not a certification. Before a public release, manually test keyboard-only operation, zoom/reflow at 200%, and at least one screen reader/browser pairing. Lesson authors remain responsible for meaningful headings, plain language, and accessible source documents.

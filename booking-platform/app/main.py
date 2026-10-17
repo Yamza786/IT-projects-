@@ -8,7 +8,9 @@ import sqlite3
 import hmac
 import hashlib
 import secrets
+import smtplib
 import time
+from email.message import EmailMessage
 from collections import defaultdict, deque
 from contextlib import closing
 from datetime import date, datetime, time as clock_time, timedelta, timezone
@@ -22,6 +24,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 DB_PATH = Path(os.environ.get("BOOKING_DB", "booking.db"))
 app = FastAPI(title="Service Booking Platform", version="0.1.0")
 ADMIN_KEY = os.environ.get("BOOKING_ADMIN_KEY", "")
+VERIFICATION_MODE=os.environ.get("BOOKING_VERIFICATION_MODE","disabled").lower()
 creation_times: dict[str, deque[float]] = defaultdict(deque)
 auth_times: dict[str, deque[float]] = defaultdict(deque)
 
@@ -71,13 +74,21 @@ def init():
             CREATE TABLE IF NOT EXISTS services(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE,description TEXT NOT NULL DEFAULT '',duration_minutes INTEGER NOT NULL CHECK(duration_minutes BETWEEN 5 AND 480),price_cents INTEGER NOT NULL CHECK(price_cents>=0),active INTEGER NOT NULL DEFAULT 1);
             CREATE TABLE IF NOT EXISTS customers(id INTEGER PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL,created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS accounts(id INTEGER PRIMARY KEY,customer_id INTEGER NOT NULL UNIQUE REFERENCES customers(id) ON DELETE CASCADE,
-                email TEXT NOT NULL UNIQUE,salt BLOB NOT NULL,password_hash BLOB NOT NULL,created_at TEXT NOT NULL);
+                email TEXT NOT NULL UNIQUE,salt BLOB NOT NULL,password_hash BLOB NOT NULL,created_at TEXT NOT NULL,verified INTEGER NOT NULL DEFAULT 1 CHECK(verified IN (0,1)));
+            CREATE TABLE IF NOT EXISTS verification_tokens(id INTEGER PRIMARY KEY,account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,used_at TEXT);
             CREATE TABLE IF NOT EXISTS sessions(id INTEGER PRIMARY KEY,account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
                 token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS bookings(id INTEGER PRIMARY KEY,service_id INTEGER NOT NULL REFERENCES services(id),customer_id INTEGER NOT NULL REFERENCES customers(id),starts_at_utc TEXT NOT NULL,ends_at_utc TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'confirmed' CHECK(status IN ('confirmed','cancelled')),created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS calendar_rules(weekday INTEGER PRIMARY KEY CHECK(weekday BETWEEN 0 AND 6),open_minute INTEGER NOT NULL,close_minute INTEGER NOT NULL,enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)));
+            CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY,booking_id INTEGER NOT NULL REFERENCES bookings(id),customer_id INTEGER NOT NULL REFERENCES customers(id),
+                idempotency_key TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('succeeded','declined')),amount_cents INTEGER NOT NULL CHECK(amount_cents>=0),
+                currency TEXT NOT NULL DEFAULT 'ZAR',created_at TEXT NOT NULL,UNIQUE(customer_id,idempotency_key));
             CREATE INDEX IF NOT EXISTS booking_time_idx ON bookings(status,starts_at_utc,ends_at_utc);
         """)
+        account_columns={r[1] for r in db.execute("PRAGMA table_info(accounts)")}
+        if "verified" not in account_columns:
+            db.execute("ALTER TABLE accounts ADD COLUMN verified INTEGER NOT NULL DEFAULT 1")
         if not db.execute("SELECT 1 FROM calendar_rules LIMIT 1").fetchone():
             db.executemany("INSERT INTO calendar_rules(weekday,open_minute,close_minute,enabled) VALUES(?,540,1020,1)",[(day,) for day in range(7)])
         if not db.execute("SELECT 1 FROM services LIMIT 1").fetchone():
@@ -87,6 +98,10 @@ def init():
 
 @app.on_event("startup")
 def startup():
+    if VERIFICATION_MODE not in {"disabled","development","smtp"}:
+        raise RuntimeError("BOOKING_VERIFICATION_MODE must be disabled, development, or smtp")
+    if VERIFICATION_MODE=="smtp" and not (os.environ.get("BOOKING_SMTP_HOST") and os.environ.get("BOOKING_SMTP_FROM")):
+        raise RuntimeError("SMTP verification requires BOOKING_SMTP_HOST and BOOKING_SMTP_FROM")
     init()
 
 
@@ -126,6 +141,22 @@ class LoginIn(BaseModel):
     password: SecretStr
 
 
+class VerifyIn(BaseModel):
+    token: str = Field(min_length=32,max_length=256)
+
+
+class ResendVerificationIn(BaseModel):
+    email: str = Field(min_length=3,max_length=254)
+
+
+class SandboxPaymentIn(BaseModel):
+    sandbox_token: str = Field(regex=r"^sbx_test_(?:success|decline)$")
+    idempotency_key: str = Field(min_length=8,max_length=200,regex=r"^[A-Za-z0-9._:-]+$")
+
+    class Config:
+        extra="forbid"
+
+
 def service_rows():
     with closing(connect()) as db:
         return [dict(r) for r in db.execute("SELECT * FROM services WHERE active=1 ORDER BY name")]
@@ -133,6 +164,28 @@ def service_rows():
 
 def password_hash(password: str, salt: bytes) -> bytes:
     return hashlib.scrypt(password.encode("utf-8"),salt=salt,n=2**14,r=8,p=1,dklen=32)
+
+
+def send_verification_email(email: str, token: str) -> None:
+    host=os.environ["BOOKING_SMTP_HOST"]
+    port=int(os.environ.get("BOOKING_SMTP_PORT","587"))
+    message=EmailMessage()
+    message["Subject"]="Verify your booking account"
+    message["From"]=os.environ["BOOKING_SMTP_FROM"]
+    message["To"]=email
+    message.set_content(f"Use this one-time verification token at POST /api/accounts/verify: {token}\nThe token expires in 24 hours. If you did not create this account, ignore this message.\n")
+    if port==465:
+        connection=smtplib.SMTP_SSL(host,port,timeout=15)
+    else:
+        connection=smtplib.SMTP(host,port,timeout=15)
+    with connection as server:
+        if port!=465:
+            server.starttls()
+        username=os.environ.get("BOOKING_SMTP_USER","")
+        password=os.environ.get("BOOKING_SMTP_PASSWORD","")
+        if username:
+            server.login(username,password)
+        server.send_message(message)
 
 
 def current_account(authorization: str | None = Header(default=None)):
@@ -143,7 +196,7 @@ def current_account(authorization: str | None = Header(default=None)):
     with closing(connect()) as db:
         row=db.execute("""SELECT a.id AS account_id,a.customer_id,a.email,c.name,s.id AS session_id
             FROM sessions s JOIN accounts a ON a.id=s.account_id JOIN customers c ON c.id=a.customer_id
-            WHERE s.token_hash=? AND s.expires_at>?""",(token_hash,datetime.now(timezone.utc).isoformat(timespec="seconds"))).fetchone()
+            WHERE s.token_hash=? AND s.expires_at>? AND a.verified=1""",(token_hash,datetime.now(timezone.utc).isoformat(timespec="seconds"))).fetchone()
     if not row:
         raise HTTPException(401,"Session is invalid or expired")
     return dict(row)
@@ -153,18 +206,71 @@ def current_account(authorization: str | None = Header(default=None)):
 def create_account(item: AccountIn, _: bool = Depends(check_auth_rate)):
     email=item.email.strip().lower()
     salt=secrets.token_bytes(16)
+    requires_verification=VERIFICATION_MODE!="disabled"
+    verification_token=secrets.token_urlsafe(32) if requires_verification else ""
     with closing(connect()) as db:
         try:
             cur=db.execute("INSERT INTO customers(name,email,created_at) VALUES(?,?,?)",
                            (item.name.strip(),email,datetime.now(timezone.utc).isoformat(timespec="seconds")))
             customer_id=cur.lastrowid
-            db.execute("INSERT INTO accounts(customer_id,email,salt,password_hash,created_at) VALUES(?,?,?,?,?)",
-                       (customer_id,email,salt,password_hash(item.password.get_secret_value(),salt),datetime.now(timezone.utc).isoformat(timespec="seconds")))
+            cur_account=db.execute("INSERT INTO accounts(customer_id,email,salt,password_hash,created_at,verified) VALUES(?,?,?,?,?,?)",
+                       (customer_id,email,salt,password_hash(item.password.get_secret_value(),salt),datetime.now(timezone.utc).isoformat(timespec="seconds"),int(not requires_verification)))
+            if requires_verification:
+                db.execute("INSERT INTO verification_tokens(account_id,token_hash,expires_at) VALUES(?,?,?)",
+                           (cur_account.lastrowid,hashlib.sha256(verification_token.encode()).hexdigest(),(datetime.now(timezone.utc)+timedelta(hours=24)).isoformat(timespec="seconds")))
             db.commit()
         except sqlite3.IntegrityError as exc:
             db.rollback()
             raise HTTPException(409,"An account with this email already exists") from exc
-    return {"created":True,"email":email,"message":"Account created. You can now sign in."}
+    if VERIFICATION_MODE=="smtp":
+        try:
+            send_verification_email(email,verification_token)
+        except (OSError,smtplib.SMTPException,ValueError) as exc:
+            raise HTTPException(503,"Account created but verification email could not be sent; retry after fixing mail delivery") from exc
+    response={"created":True,"email":email,"verified":not requires_verification,
+              "message":"Account created. Verify the email before signing in." if requires_verification else "Account created. You can now sign in."}
+    if VERIFICATION_MODE=="development":
+        response["development_verification_token"]=verification_token
+    return response
+
+
+@app.post("/api/accounts/verify")
+def verify_account(item: VerifyIn):
+    token_hash=hashlib.sha256(item.token.encode()).hexdigest()
+    now=datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with closing(connect()) as db:
+        db.execute("BEGIN IMMEDIATE")
+        token=db.execute("SELECT * FROM verification_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>?",(token_hash,now)).fetchone()
+        if not token:
+            db.rollback(); raise HTTPException(400,"Verification token is invalid, expired, or already used")
+        db.execute("UPDATE accounts SET verified=1 WHERE id=?",(token["account_id"],))
+        db.execute("UPDATE verification_tokens SET used_at=? WHERE id=?",(now,token["id"]))
+        db.commit()
+    return {"verified":True}
+
+
+@app.post("/api/accounts/verification/resend")
+def resend_verification(item: ResendVerificationIn, _: bool = Depends(check_auth_rate)):
+    email=item.email.strip().lower()
+    token_value=""
+    with closing(connect()) as db:
+        account=db.execute("SELECT id,verified FROM accounts WHERE email=?",(email,)).fetchone()
+        if account and not account["verified"] and VERIFICATION_MODE!="disabled":
+            token_value=secrets.token_urlsafe(32)
+            now=datetime.now(timezone.utc)
+            db.execute("UPDATE verification_tokens SET used_at=? WHERE account_id=? AND used_at IS NULL",(now.isoformat(timespec="seconds"),account["id"]))
+            db.execute("INSERT INTO verification_tokens(account_id,token_hash,expires_at) VALUES(?,?,?)",
+                       (account["id"],hashlib.sha256(token_value.encode()).hexdigest(),(now+timedelta(hours=24)).isoformat(timespec="seconds")))
+            db.commit()
+    if token_value and VERIFICATION_MODE=="smtp":
+        try:
+            send_verification_email(email,token_value)
+        except (OSError,smtplib.SMTPException,ValueError) as exc:
+            raise HTTPException(503,"Verification email could not be sent") from exc
+    response={"accepted":True,"message":"If the account needs verification, a new verification instruction has been issued."}
+    if token_value and VERIFICATION_MODE=="development":
+        response["development_verification_token"]=token_value
+    return response
 
 
 @app.post("/api/login")
@@ -173,6 +279,8 @@ def login(item: LoginIn, _: bool = Depends(check_auth_rate)):
         account=db.execute("SELECT * FROM accounts WHERE email=?",(item.email.strip().lower(),)).fetchone()
         if not account or not hmac.compare_digest(password_hash(item.password.get_secret_value(),account["salt"]),account["password_hash"]):
             raise HTTPException(401,"Email or password is incorrect")
+        if not account["verified"]:
+            raise HTTPException(403,"Verify your email before signing in")
         token=secrets.token_urlsafe(32)
         created=datetime.now(timezone.utc)
         expires=created+timedelta(hours=24)
@@ -323,6 +431,41 @@ def cancel_my_booking(booking_id: int, account: dict = Depends(current_account))
             raise HTTPException(404,"Active booking not found")
         db.commit()
     return {"id":booking_id,"status":"cancelled"}
+
+
+@app.post("/api/my-bookings/{booking_id}/payments/sandbox",status_code=201)
+def sandbox_payment(booking_id: int, item: SandboxPaymentIn, account: dict = Depends(current_account)):
+    """Simulate a provider sandbox result; this endpoint never accepts card data."""
+    with closing(connect()) as db:
+        db.execute("BEGIN IMMEDIATE")
+        previous=db.execute("SELECT * FROM payments WHERE customer_id=? AND idempotency_key=?",(account["customer_id"],item.idempotency_key)).fetchone()
+        if previous:
+            if previous["booking_id"]!=booking_id:
+                db.rollback(); raise HTTPException(409,"Payment idempotency key belongs to another booking")
+            db.commit()
+            return {**dict(previous),"replayed":True}
+        booking=db.execute("""SELECT b.*,s.price_cents FROM bookings b JOIN services s ON s.id=b.service_id
+            WHERE b.id=? AND b.customer_id=?""",(booking_id,account["customer_id"])).fetchone()
+        if not booking:
+            db.rollback(); raise HTTPException(404,"Booking not found")
+        if booking["status"]!="confirmed":
+            db.rollback(); raise HTTPException(409,"Only confirmed bookings can be paid")
+        existing=db.execute("SELECT 1 FROM payments WHERE booking_id=? AND status='succeeded'",(booking_id,)).fetchone()
+        if existing:
+            db.rollback(); raise HTTPException(409,"Booking is already paid")
+        status="succeeded" if item.sandbox_token=="sbx_test_success" else "declined"
+        cur=db.execute("INSERT INTO payments(booking_id,customer_id,idempotency_key,status,amount_cents,created_at) VALUES(?,?,?,?,?,?)",
+                       (booking_id,account["customer_id"],item.idempotency_key,status,booking["price_cents"],datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        db.commit()
+        return {"id":cur.lastrowid,"booking_id":booking_id,"status":status,"amount_cents":booking["price_cents"],"currency":"ZAR","sandbox":True,"replayed":False}
+
+
+@app.get("/api/my-bookings/{booking_id}/payments")
+def my_booking_payments(booking_id: int, account: dict = Depends(current_account)):
+    with closing(connect()) as db:
+        if not db.execute("SELECT 1 FROM bookings WHERE id=? AND customer_id=?",(booking_id,account["customer_id"])).fetchone():
+            raise HTTPException(404,"Booking not found")
+        return [dict(row) for row in db.execute("SELECT id,booking_id,status,amount_cents,currency,created_at FROM payments WHERE booking_id=? ORDER BY id DESC",(booking_id,))]
 
 
 @app.post("/api/bookings/{booking_id}/cancel")

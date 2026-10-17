@@ -2,6 +2,8 @@
 
 See [RECOVERY.md](RECOVERY.md) for backup verification and restore guidance.
 
+For optional structured operational history, pass `--log-jsonl /path/to/operations.jsonl` to `organize_files.py` or `backup.py`. Events omit file contents and write with owner-only permissions on POSIX systems. Keep logs private because relative filenames may still reveal personal information.
+
 Small Python utilities for repetitive file and spreadsheet work. Tools are safe by default: file organization prints a plan unless `--apply` is passed. The examples operate on user-selected paths and never delete source files.
 
 ## Requirements

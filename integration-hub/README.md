@@ -2,7 +2,7 @@
 
 Rate counters are stored in SQLite using per-key UTC minute buckets, so a process restart does not reset a key's current-minute allowance. Set comma-separated `HUB_WRITE_KEYS` and `HUB_READ_KEYS` values to overlap credentials during rotation; remove the retired key after clients have moved. Legacy single-key variables remain supported.
 
-A small versioned API that accepts records from source systems, validates them into a canonical event format, and deduplicates retries with an idempotency key. It demonstrates authorization, input validation, rate limiting, and versioned routes without making outbound network requests.
+A small versioned API that accepts records from source systems, validates them into a canonical event format, and deduplicates retries with an idempotency key. Its opt-in webhook dispatcher forwards events to a configured HTTPS endpoint, saves a resumable cursor after each successful delivery, and retries safely with the event idempotency key.
 
 ## Run
 
@@ -27,3 +27,7 @@ curl -H "X-API-Key: $HUB_WRITE_KEY" -H 'Content-Type: application/json' \
 ```
 
 Read accepted events with the read key at `GET /api/v1/events`. Reusing an idempotency key returns the original event.
+
+## Optional outbound webhook
+
+Set `HUB_OUTBOUND_URL` to a trusted HTTPS JSON endpoint, `HUB_READ_KEY` to a read key, and optionally `HUB_OUTBOUND_TOKEN` for a bearer token. Then run `python dispatch_webhook.py`. It reads events after the cursor in `HUB_OUTBOUND_CURSOR` (default `hub-outbound-cursor.json`), forwards them in order, and advances the cursor only after a successful response. Use `HUB_URL` for a non-default local hub. HTTP destinations are accepted only for loopback tests. The script does not follow redirects, so credentials are not forwarded to a redirect target. Protect the cursor and credentials; a webhook target receives business event payloads.

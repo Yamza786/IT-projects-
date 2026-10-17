@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import sys
+import threading
 import zipfile
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
@@ -14,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/"developer-toolkit"))
 
 
 def load_module(project: str, module_name: str):
@@ -139,7 +142,8 @@ def test_security_analyzer_flags_and_suppresses_documentation_ip():
 
 def test_learning_answer_schedules_next_review(tmp_path):
     with open_app(tmp_path, "adaptive-learning", "test_learning") as (client, _):
-        assert client.get("/").status_code == 200
+        page=client.get("/").text
+        assert "Skip to lessons" in page and 'aria-live="polite"' in page and ":focus-visible" in page
         lesson = client.get("/api/lessons").json()[0]
         question = client.get(f"/api/lessons/{lesson['id']}/quiz").json()[0]
         response = client.post(f"/api/questions/{question['id']}/answer", json={"selected_index": 0})
@@ -171,10 +175,18 @@ def test_legal_research_preserves_source_link_and_document_versions(tmp_path):
 
 def test_booking_requires_account_and_rejects_overlap(tmp_path, monkeypatch):
     monkeypatch.setenv("BOOKING_ADMIN_KEY", "unused-admin-key")
+    monkeypatch.setenv("BOOKING_VERIFICATION_MODE","development")
     with open_app(tmp_path, "booking-platform", "test_booking") as (client, module):
         assert client.get("/").status_code == 200
         account = client.post("/api/accounts", json={"name":"Demo user","email":"demo@example.test","password":"long-demo-password"})
         assert account.status_code == 201
+        assert client.post("/api/login",json={"email":"demo@example.test","password":"long-demo-password"}).status_code==403
+        verification=account.json()["development_verification_token"]
+        resent=client.post("/api/accounts/verification/resend",json={"email":"demo@example.test"}).json()
+        assert resent["accepted"] and client.post("/api/accounts/verify",json={"token":verification}).status_code==400
+        verification=resent["development_verification_token"]
+        assert client.post("/api/accounts/verify",json={"token":verification}).status_code==200
+        assert client.post("/api/accounts/verify",json={"token":verification}).status_code==400
         login = client.post("/api/login", json={"email":"demo@example.test","password":"long-demo-password"}).json()
         headers = {"Authorization":"Bearer "+login["access_token"]}
         day=(datetime.now(timezone.utc)+timedelta(days=3)).date()
@@ -185,6 +197,32 @@ def test_booking_requires_account_and_rejects_overlap(tmp_path, monkeypatch):
         assert client.post("/api/bookings", json=body, headers=headers).status_code == 201
         assert client.post("/api/bookings", json=body, headers=headers).status_code == 409
         assert len(client.get("/api/my-bookings", headers=headers).json()) == 1
+        paid_service=client.post("/api/services",json={"name":"Paid sandbox session","description":"Synthetic payment demo","duration_minutes":30,"price_cents":12000},headers={"X-Admin-Key":"unused-admin-key"}).json()
+        paid_start=(datetime.now(timezone.utc)+timedelta(days=3)).replace(hour=11,minute=0,second=0,microsecond=0)
+        paid_booking=client.post("/api/bookings",json={"service_id":paid_service["id"],"starts_at":paid_start.isoformat()},headers=headers).json()
+        payment_url=f"/api/my-bookings/{paid_booking['id']}/payments/sandbox"
+        invalid=client.post(payment_url,json={"sandbox_token":"sbx_test_success","idempotency_key":"booking-pay-0001","card_number":"4111111111111111"},headers=headers)
+        assert invalid.status_code==422
+        declined=client.post(payment_url,json={"sandbox_token":"sbx_test_decline","idempotency_key":"booking-pay-0002"},headers=headers)
+        assert declined.status_code==201 and declined.json()["status"]=="declined"
+        payment=client.post(payment_url,json={"sandbox_token":"sbx_test_success","idempotency_key":"booking-pay-0001"},headers=headers)
+        assert payment.status_code==201 and payment.json()["amount_cents"]==12000 and payment.json()["sandbox"]
+        assert client.post(payment_url,json={"sandbox_token":"sbx_test_success","idempotency_key":"booking-pay-0001"},headers=headers).json()["replayed"]
+        smtp_calls=[]
+        class FakeSMTP:
+            def __init__(self,host,port,timeout): smtp_calls.append(("connect",host,port,timeout))
+            def __enter__(self): return self
+            def __exit__(self,*args): pass
+            def starttls(self): smtp_calls.append(("starttls",))
+            def login(self,user,password): smtp_calls.append(("login",user,password))
+            def send_message(self,message): smtp_calls.append(("send",message["To"],message["Subject"]))
+        monkeypatch.setenv("BOOKING_SMTP_HOST","mail.example.test")
+        monkeypatch.setenv("BOOKING_SMTP_FROM","bookings@example.test")
+        monkeypatch.setenv("BOOKING_SMTP_USER","mailer")
+        monkeypatch.setenv("BOOKING_SMTP_PASSWORD","secret-for-test")
+        monkeypatch.setattr(module.smtplib,"SMTP",FakeSMTP)
+        module.send_verification_email("customer@example.test","one-time-token")
+        assert ("starttls",) in smtp_calls and ("send","customer@example.test","Verify your booking account") in smtp_calls
 
 
 def test_integration_hub_idempotency(tmp_path):
@@ -197,6 +235,25 @@ def test_integration_hub_idempotency(tmp_path):
         replay=client.post("/api/v1/integrations/billing/events",json=event,headers=headers)
         assert first.status_code==201 and replay.json()["replayed"] is True
         assert len(client.get("/api/v1/events",headers={"X-API-Key":"read-test-key"}).json())==1
+        assert client.get("/api/v1/events",params={"after_id":first.json()["id"]},headers={"X-API-Key":"read-test-key"}).json()==[]
+    dispatcher_spec=importlib.util.spec_from_file_location("test_hub_dispatch",ROOT/"integration-hub"/"dispatch_webhook.py")
+    dispatcher=importlib.util.module_from_spec(dispatcher_spec);dispatcher_spec.loader.exec_module(dispatcher)
+    cursor=tmp_path/"cursor.json";dispatcher.save_cursor(cursor,17)
+    assert json.loads(cursor.read_text())["after_id"]==17
+    received=[]
+    class Receiver(BaseHTTPRequestHandler):
+        def do_POST(self):
+            received.append((json.loads(self.rfile.read(int(self.headers["Content-Length"]))),self.headers.get("Idempotency-Key"),self.headers.get("Authorization")))
+            self.send_response(204);self.end_headers()
+        def log_message(self,*args):
+            pass
+    server=HTTPServer(("127.0.0.1",0),Receiver)
+    worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
+    try:
+        dispatcher.deliver(first.json(),f"http://127.0.0.1:{server.server_port}/events","test-token")
+    finally:
+        server.shutdown();server.server_close();worker.join(timeout=2)
+    assert received[0][0]["external_id"]=="17" and received[0][1]=="hub-billing-17" and received[0][2]=="Bearer test-token"
 
 
 def test_portal_requires_https_source_and_serves_language_filter(tmp_path):
@@ -208,6 +265,10 @@ def test_portal_requires_https_source_and_serves_language_filter(tmp_path):
         assert len(client.get("/api/resources",params={"language":"en"}).json())==1
         payload["slug"]="bad-link";payload["source_url"]="http://example.org/resource"
         assert client.post("/api/resources",json=payload).status_code==422
+    seed_spec=importlib.util.spec_from_file_location("test_portal_seed",ROOT/"accessible-portal"/"seed_resources.py")
+    seed=importlib.util.module_from_spec(seed_spec);seed_spec.loader.exec_module(seed)
+    db_path=tmp_path/"seeded-portal.db"
+    assert seed.seed(db_path)==4 and seed.seed(db_path)==0
 
 
 def test_enterprise_roles_atomic_sale_and_security_import(tmp_path):
@@ -226,6 +287,9 @@ def test_enterprise_roles_atomic_sale_and_security_import(tmp_path):
         assert client.get("/api/backup",headers=reader).status_code==403
         backup=client.get("/api/backup",headers=admin)
         assert backup.status_code==200 and backup.json()["format"]=="polymath-enterprise-backup-v1"
+        assert client.get("/metrics",headers=reader).status_code==403
+        metrics=client.get("/metrics",headers=admin)
+        assert metrics.status_code==200 and "polymath_enterprise_records" in metrics.text
 
 
 def test_csv_and_open_data_tools_validate_synthetic_inputs(tmp_path):
@@ -233,6 +297,19 @@ def test_csv_and_open_data_tools_validate_synthetic_inputs(tmp_path):
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     data=module.read_data(ROOT/"sa-open-data"/"sample.csv")
     assert len(data)==6 and "Example" in module.build(data,"Demo","Synthetic sample")
+    try:
+        module.build(data,"Real data","Agency data")
+        assert False,"missing provenance must be rejected"
+    except ValueError as exc:
+        assert "Real datasets require" in str(exc)
+    real_report=module.build(data,"Real data","Agency data",source_url="https://agency.gov.za/data",accessed_on="2026-10-17",
+        units="people",definitions="Count of residents",coverage="Provinces",missing_data="No imputation")
+    assert "Dataset provenance" in real_report and "No imputation" in real_report
+    try:
+        module.build(data,"Bad URL","Agency",source_url="https://",accessed_on="today",units="people",definitions="x",coverage="y",missing_data="none")
+        assert False,"invalid provenance must be rejected"
+    except ValueError:
+        pass
     audit_spec=importlib.util.spec_from_file_location("test_csv_audit",ROOT/"developer-toolkit"/"csv_audit.py")
     audit=importlib.util.module_from_spec(audit_spec);audit_spec.loader.exec_module(audit)
     path=tmp_path/"data.csv";path.write_text("name,email\nAda,ada@example.test\n",encoding="utf-8")
@@ -246,8 +323,10 @@ def test_automation_preview_grouped_report_and_backup(tmp_path,monkeypatch):
     organizer=importlib.util.module_from_spec(organizer_spec);organizer_spec.loader.exec_module(organizer)
     planned=organizer.plan(source)
     assert planned[0][1].parent.name=="txt" and (source/"notes.TXT").exists()
-    monkeypatch.setattr(sys,"argv",["organize_files.py",str(source)])
+    ops_log=tmp_path/"ops.jsonl"
+    monkeypatch.setattr(sys,"argv",["organize_files.py",str(source),"--log-jsonl",str(ops_log)])
     assert organizer.main()==0 and (source/"notes.TXT").exists()
+    assert json.loads(ops_log.read_text().splitlines()[-1])["event"]=="file_organization_finished"
 
     report_spec=importlib.util.spec_from_file_location("test_csv_report",ROOT/"developer-toolkit"/"csv_report.py")
     report_module=importlib.util.module_from_spec(report_spec);report_spec.loader.exec_module(report_module)
@@ -258,8 +337,9 @@ def test_automation_preview_grouped_report_and_backup(tmp_path,monkeypatch):
     backup_spec=importlib.util.spec_from_file_location("test_backup",ROOT/"developer-toolkit"/"backup.py")
     backup=importlib.util.module_from_spec(backup_spec);backup_spec.loader.exec_module(backup)
     destination=tmp_path/"backups"
-    monkeypatch.setattr(sys,"argv",["backup.py",str(source),str(destination)])
+    monkeypatch.setattr(sys,"argv",["backup.py",str(source),str(destination),"--log-jsonl",str(ops_log)])
     assert backup.main()==0
+    assert json.loads(ops_log.read_text().splitlines()[-1])["event"]=="backup_created"
     archive=next(destination.glob("*.zip"))
     with zipfile.ZipFile(archive) as zipped:
         assert "notes.TXT" in zipped.namelist()

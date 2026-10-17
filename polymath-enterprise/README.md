@@ -16,6 +16,8 @@ uvicorn app.main:app --reload
 
 Open `/` for the business interface or `/docs` for the API. The database defaults to `enterprise.db`; set `ENTERPRISE_DB` to choose another path. Keep the API on a trusted local network and protect the database and backups. This is a portfolio capstone, not a production accounting or security system.
 
+`/health` checks SQLite readiness. Admin-key protected `/metrics` exposes process uptime, database size, and low-cardinality record counts for external monitoring; it does not expose customer or financial values.
+
 ## Roles
 
 - Reader key: read catalogue, report, and audit history.

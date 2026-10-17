@@ -1,5 +1,7 @@
 # Adaptive Learning and Tutoring Platform
 
+See [ACCESSIBILITY.md](ACCESSIBILITY.md) for the UI review, measured color contrast, and remaining manual assistive-technology checks.
+
 A small learning workspace with lessons, multiple-choice practice, saved attempts, and topic suggestions based on missed answers. The sample lesson content is intentionally general; question generation is not performed by an AI model.
 
 Add lessons and reviewed questions with `POST /api/lessons`. Every answer schedules a follow-up using a simple spaced-repetition interval; missed answers return to a one-day interval. `GET /api/review-due` lists questions due today without exposing answer keys.

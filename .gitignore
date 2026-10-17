@@ -14,4 +14,7 @@ __pycache__/
 *.sqlite
 *.sqlite3
 *.log
+*.jsonl
+hub-outbound-cursor.json
+devops-demo/.env.production
 contributions.json

@@ -112,11 +112,13 @@ def ingest(source: str, item: EventIn, idempotency_key: str | None = Header(defa
 
 
 @app.get("/api/v1/events")
-def list_events(limit: int = 100, _: dict = Depends(authorize("read"))):
+def list_events(after_id: int = 0, limit: int = 100, _: dict = Depends(authorize("read"))):
+    if after_id < 0:
+        raise HTTPException(422, "after_id must be nonnegative")
     if not 1 <= limit <= 500:
         raise HTTPException(422, "limit must be between 1 and 500")
     with closing(connect()) as db:
-        rows = [dict(r) for r in db.execute("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))]
+        rows = [dict(r) for r in db.execute("SELECT * FROM events WHERE id>? ORDER BY id LIMIT ?", (after_id,limit))]
     for row in rows:
         row["payload"] = json.loads(row["payload"])
     return rows

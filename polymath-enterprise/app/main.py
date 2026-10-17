@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import sqlite3
+import time
 from contextlib import closing
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ KEYS = {"reader": os.environ.get("ENTERPRISE_READER_KEY", ""),
         "admin": os.environ.get("ENTERPRISE_ADMIN_KEY", "")}
 app = FastAPI(title="Polymath Enterprise", version="0.1.0")
 RANK = {"reader": 1, "manager": 2, "admin": 3}
+PROCESS_STARTED = time.monotonic()
 
 
 def connect():
@@ -144,7 +146,28 @@ class ResearchEvidenceIn(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    try:
+        with closing(connect()) as db:
+            db.execute("SELECT 1").fetchone()
+    except sqlite3.Error as exc:
+        raise HTTPException(503,"Database readiness check failed") from exc
+    return {"status": "ok", "database": "ready"}
+
+
+@app.get("/metrics")
+def metrics(_: dict = Depends(require_role("admin"))):
+    """Expose low-cardinality Prometheus metrics without customer or financial values."""
+    tables=("customers","products","sales","expenses","audit_log","security_reports","research_evidence")
+    with closing(connect()) as db:
+        counts={table:db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables}
+    db_bytes=DB_PATH.stat().st_size if DB_PATH.exists() else 0
+    lines=["# HELP polymath_enterprise_uptime_seconds Process uptime.","# TYPE polymath_enterprise_uptime_seconds gauge",
+           f"polymath_enterprise_uptime_seconds {time.monotonic()-PROCESS_STARTED:.3f}",
+           "# HELP polymath_enterprise_database_bytes SQLite database size.","# TYPE polymath_enterprise_database_bytes gauge",
+           f"polymath_enterprise_database_bytes {db_bytes}","# HELP polymath_enterprise_records Number of records by table.",
+           "# TYPE polymath_enterprise_records gauge"]
+    lines.extend(f'polymath_enterprise_records{{table="{table}"}} {count}' for table,count in counts.items())
+    return Response("\n".join(lines)+"\n",media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 @app.get("/api/customers")

@@ -8,6 +8,7 @@ import os
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from jsonl_log import append_event
 
 
 def digest(path: Path) -> str:
@@ -22,6 +23,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument("destination", type=Path)
+    parser.add_argument("--log-jsonl", type=Path, help="append private operational events to this JSONL file")
     args = parser.parse_args()
     source = args.source.expanduser().resolve()
     destination = args.destination.expanduser().resolve()
@@ -48,7 +50,9 @@ def main() -> int:
         if archive.exists():
             archive.unlink()
         print(f"Backup failed: {exc}")
+        append_event(args.log_jsonl,"backup_failed",source=source.name,error_type=type(exc).__name__)
         return 1
+    append_event(args.log_jsonl,"backup_created",source=source.name,files=len(manifest),archive_bytes=archive.stat().st_size,archive_sha256=digest(archive))
     print(f"Archive: {archive}")
     print(f"Manifest: {sidecar}")
     print(f"Files: {len(manifest)}")
