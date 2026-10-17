@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
 DB_PATH = Path(os.environ.get("FINANCE_DB", "finance.db"))
@@ -127,6 +127,39 @@ def add_transaction(item: TransactionIn):
                              (item.kind, item.category.strip(), item.amount_cents, item.memo.strip(), item.day.isoformat(), datetime.now(timezone.utc).isoformat()))
         db.commit()
         return dict(db.execute("SELECT * FROM transactions WHERE id=?", (cursor.lastrowid,)).fetchone())
+
+
+@app.put("/api/transactions/{transaction_id}")
+def update_transaction(transaction_id: int, item: TransactionIn):
+    """Replace a manually entered transaction; debt-payment ledger rows stay read-only."""
+    with closing(db_connect()) as db:
+        existing = db.execute("SELECT 1 FROM transactions WHERE id=?", (transaction_id,)).fetchone()
+        if not existing:
+            raise HTTPException(404, "Transaction not found")
+        debt_payment = db.execute("""SELECT 1 FROM transactions t JOIN debt_payments p ON
+            t.category='Debt repayment' AND t.amount_cents=p.amount_cents AND t.day=p.day
+            JOIN debts d ON t.memo=d.name || ': ' || p.memo WHERE t.id=?""",(transaction_id,)).fetchone()
+        if debt_payment:
+            raise HTTPException(409, "Debt repayments are edited through their debt record")
+        db.execute("UPDATE transactions SET kind=?,category=?,amount_cents=?,memo=?,day=? WHERE id=?",
+                   (item.kind,item.category.strip(),item.amount_cents,item.memo.strip(),item.day.isoformat(),transaction_id))
+        db.commit()
+        return dict(db.execute("SELECT * FROM transactions WHERE id=?",(transaction_id,)).fetchone())
+
+
+@app.get("/api/transactions.csv")
+def export_transactions(limit: int = Query(default=5000, ge=1, le=50000)):
+    """Download a spreadsheet-friendly copy of the ledger."""
+    import csv
+    import io
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(("id","day","kind","category","amount_cents","memo"))
+    with closing(db_connect()) as db:
+        for row in db.execute("SELECT id,day,kind,category,amount_cents,memo FROM transactions ORDER BY day,id LIMIT ?",(limit,)):
+            writer.writerow(tuple(row))
+    return Response(output.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition":"attachment; filename=finance-transactions.csv"})
 
 
 @app.get("/api/budgets")

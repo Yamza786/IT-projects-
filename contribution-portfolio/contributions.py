@@ -57,6 +57,12 @@ def markdown(entries: list[dict]) -> str:
             out.append(f"- Issue: {entry['issue_url']}")
         if entry.get("pr_url"):
             out.append(f"- Pull request: {entry['pr_url']}")
+        if entry.get("review_status"):
+            out.append(f"- Review status: {entry['review_status']}")
+        if entry.get("verification"):
+            out.append(f"- Verification: {entry['verification']}")
+        if entry.get("verification_note"):
+            out.append(f"- Verification note: {entry['verification_note']}")
         out += [f"- What I learned: {entry['lesson']}", ""]
     return "\n".join(out)
 
@@ -71,6 +77,9 @@ def main() -> int:
     add.add_argument("--date", default=date.today().isoformat())
     add.add_argument("--summary", required=True)
     add.add_argument("--lesson", required=True)
+    add.add_argument("--review-status", choices=("draft","in-review","changes-requested","approved","merged","closed"), default="draft")
+    add.add_argument("--verification", choices=("unverified","reproduced","tested","reviewed"), default="unverified")
+    add.add_argument("--verification-note", default="")
     commands.add_parser("list", help="list recorded entries")
     showcase = commands.add_parser("showcase", help="print a Markdown portfolio")
     showcase.add_argument("--output", type=Path)
@@ -88,7 +97,9 @@ def main() -> int:
                 if url and not valid_github_url(url):
                     parser.error("issue and pull request links must be HTTPS GitHub repository URLs")
             entries.append({"project": args.project.strip(), "issue_url": args.issue_url, "pr_url": args.pr_url,
-                            "date": args.date, "summary": args.summary.strip(), "lesson": args.lesson.strip()})
+                            "date": args.date, "summary": args.summary.strip(), "lesson": args.lesson.strip(),
+                            "review_status":args.review_status,"verification":args.verification,
+                            "verification_note":args.verification_note.strip()})
             write_entries(entries)
             print(f"Saved entry to {DATA_PATH}")
         elif args.command == "list":

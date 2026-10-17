@@ -14,6 +14,8 @@ Include a source timeline, input SHA-256, reviewed suppressions, and response no
 python analyze.py auth.log --suppress 192.0.2.44 --note "Reviewed against the approved maintenance window" --json incident.json
 ```
 
+Load a reviewed local rule pack with `--rules rules.example.json`. The supported JSON fields are `threshold` and `suppressed_sources`. The parser accepts OpenSSH `from ADDRESS` and PAM `rhost=ADDRESS` forms; review suppressions because they hide alerts for matching IPs.
+
 Input is read only. Output includes rule, source address, counts, and a severity label; it does not retain usernames or raw log lines. Addresses in the sample file are documentation-only examples.
 
 ## Rules and limits

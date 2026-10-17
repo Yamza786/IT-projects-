@@ -1,5 +1,7 @@
 # API and Integration Hub
 
+Rate counters are stored in SQLite using per-key UTC minute buckets, so a process restart does not reset a key's current-minute allowance. Set comma-separated `HUB_WRITE_KEYS` and `HUB_READ_KEYS` values to overlap credentials during rotation; remove the retired key after clients have moved. Legacy single-key variables remain supported.
+
 A small versioned API that accepts records from source systems, validates them into a canonical event format, and deduplicates retries with an idempotency key. It demonstrates authorization, input validation, rate limiting, and versioned routes without making outbound network requests.
 
 ## Run
@@ -13,7 +15,7 @@ python -m pip install -r ../requirements-termux.txt
 uvicorn app.main:app --reload
 ```
 
-Do not put real keys in source control. API keys are compared in memory and are not stored in the database. This local demo has in-memory rate limits and is not a substitute for a production gateway.
+Do not put real keys in source control. API keys are compared in memory and are not stored in the database; only SHA-256 fingerprints and per-minute counters are persisted. Persistent local counters are not a substitute for a production API gateway or a distributed limiter.
 
 ## Example
 

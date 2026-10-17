@@ -13,7 +13,7 @@ from contextlib import closing
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -61,6 +61,16 @@ class DocumentIn(BaseModel):
 class AskIn(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
     limit: int = Field(default=5, ge=1, le=10)
+
+
+class EvaluationQuery(BaseModel):
+    question: str = Field(min_length=3,max_length=1000)
+    relevant_document_ids: list[int] = Field(min_items=1,max_items=50)
+
+
+class EvaluationIn(BaseModel):
+    cases: list[EvaluationQuery] = Field(min_items=1,max_items=100)
+    k: int = Field(default=5,ge=1,le=10)
 
 
 def tokens(text: str) -> set[str]:
@@ -116,6 +126,23 @@ def add_document(item: DocumentIn):
                          (item.title.strip(),item.text.strip(),item.source_uri.strip(),item.accessed_on.isoformat() if item.accessed_on else None,datetime.now(timezone.utc).isoformat(timespec="seconds")))
         db.commit()
         return {"id": cur.lastrowid, "title": item.title.strip()}
+
+
+@app.put("/api/documents/import-text",status_code=201)
+async def import_text(request: Request, title: str = Query(min_length=1,max_length=200),
+                      source_uri: str = Query(default="",max_length=1000), accessed_on: date | None = None):
+    """Import UTF-8 .txt or .md content as a source document (100 KB maximum)."""
+    content_type=request.headers.get("content-type","").split(";",1)[0].strip().lower()
+    if content_type not in {"text/plain","text/markdown"}:
+        raise HTTPException(415,"Use text/plain or text/markdown for .txt and .md imports")
+    raw=await request.body()
+    if not raw or len(raw)>100_000:
+        raise HTTPException(413 if raw else 422,"Imported document must contain 1–100,000 bytes")
+    try:
+        text=raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(422,"Document must be UTF-8 encoded") from exc
+    return add_document(DocumentIn(title=title,text=text,source_uri=source_uri,accessed_on=accessed_on))
 
 
 @app.get("/api/documents")
@@ -195,6 +222,35 @@ def ask(item: AskIn):
 def unanswered():
     with closing(connect()) as db:
         return [dict(r) for r in db.execute("SELECT * FROM unanswered ORDER BY id DESC LIMIT 100")]
+
+
+@app.post("/api/evaluate")
+def evaluate(item: EvaluationIn):
+    """Measure retrieval recall@k and reciprocal rank against a small labeled query set."""
+    results=[]
+    for case in item.cases:
+        query=tokens(case.question)
+        ranked=[]
+        if query:
+            with closing(connect()) as db:
+                docs=db.execute("SELECT id,title,text FROM documents ORDER BY id").fetchall()
+            for doc in docs:
+                for index,passage in enumerate(passages(doc["text"])):
+                    words=tokens(passage); overlap=query & words
+                    if overlap:
+                        score=len(overlap)/len(query)+len(overlap)/max(len(words),1)*0.2
+                        ranked.append((score,doc["id"],index+1))
+            ranked.sort(key=lambda row:(-row[0],row[1],row[2]))
+        top=ranked[:item.k]
+        relevant=set(case.relevant_document_ids)
+        ranks=[index for index,(_,document_id,_) in enumerate(top,1) if document_id in relevant]
+        results.append({"question":case.question,"relevant_document_ids":sorted(relevant),
+                        "retrieved_document_ids":[document_id for _,document_id,_ in top],
+                        "recall_at_k":len({document_id for _,document_id,_ in top if document_id in relevant})/len(relevant),
+                        "reciprocal_rank":1/ranks[0] if ranks else 0.0})
+    return {"queries":len(results),"k":item.k,"mean_recall_at_k":round(sum(r["recall_at_k"] for r in results)/len(results),4),
+            "mean_reciprocal_rank":round(sum(r["reciprocal_rank"] for r in results)/len(results),4),
+            "results":results,"method":"labeled document relevance; lexical sentence retrieval; not an answer-quality score"}
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -36,6 +36,10 @@ def init():
             CREATE TABLE IF NOT EXISTS review_schedule(question_id INTEGER PRIMARY KEY REFERENCES questions(id) ON DELETE CASCADE,
                 interval_days INTEGER NOT NULL, ease REAL NOT NULL, repetitions INTEGER NOT NULL, due_on TEXT NOT NULL);
         """)
+        lesson_columns={r[1] for r in db.execute("PRAGMA table_info(lessons)")}
+        for column,definition in (("source_title","TEXT NOT NULL DEFAULT ''"),("source_url","TEXT NOT NULL DEFAULT ''"),("verified_on","TEXT")):
+            if column not in lesson_columns:
+                db.execute(f"ALTER TABLE lessons ADD COLUMN {column} {definition}")
         if not db.execute("SELECT 1 FROM lessons LIMIT 1").fetchone():
             cur = db.execute("INSERT INTO lessons(title,body,tags) VALUES(?,?,?)", (
                 "Working with evidence", "A good technical claim can be checked against reliable evidence. Record where a claim came from, when the source was published, and what it does not establish. Correlation describes a relationship between observations; by itself, it does not show that one caused the other.", "research,critical-thinking"))
@@ -70,22 +74,27 @@ class LessonIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=20, max_length=12000)
     tags: str = Field(default="", max_length=300)
+    source_title: str = Field(default="", max_length=200)
+    source_url: str = Field(default="", max_length=1000)
+    verified_on: date | None = None
     questions: list[QuestionIn] = Field(min_items=1, max_items=100)
-
 
 @app.get("/api/lessons")
 def lessons():
     with closing(connect()) as db:
-        return [dict(r) for r in db.execute("SELECT id,title,body,tags FROM lessons ORDER BY id")]
+        return [dict(r) for r in db.execute("SELECT id,title,body,tags,source_title,source_url,verified_on FROM lessons ORDER BY id")]
 
 
 @app.post("/api/lessons", status_code=201)
 def add_lesson(item: LessonIn):
+    if item.source_url and not item.source_url.startswith("https://"):
+        raise HTTPException(422,"Lesson sources must use HTTPS")
     for question in item.questions:
         if len(question.options) < 2 or question.correct_index >= len(question.options):
             raise HTTPException(422, "Each correct_index must point to an existing option")
     with closing(connect()) as db:
-        cur = db.execute("INSERT INTO lessons(title,body,tags) VALUES(?,?,?)",(item.title.strip(),item.body.strip(),item.tags.strip()))
+        cur = db.execute("INSERT INTO lessons(title,body,tags,source_title,source_url,verified_on) VALUES(?,?,?,?,?,?)",
+                         (item.title.strip(),item.body.strip(),item.tags.strip(),item.source_title.strip(),item.source_url.strip(),item.verified_on.isoformat() if item.verified_on else None))
         lesson_id=cur.lastrowid
         db.executemany("INSERT INTO questions(lesson_id,prompt,options,correct_index,explanation,tag) VALUES(?,?,?,?,?,?)",
                        [(lesson_id,q.prompt.strip(),json.dumps(q.options),q.correct_index,q.explanation.strip(),q.tag.strip()) for q in item.questions])
@@ -163,7 +172,9 @@ def recommendations():
 
 @app.get("/", response_class=HTMLResponse)
 def home():
-    cards = "".join(f'<article><h2>{html.escape(l["title"])}</h2><p>{html.escape(l["body"])}</p><button onclick="start({l["id"]})">Practice this lesson</button></article>' for l in lessons())
+    cards = "".join(f'<article><h2>{html.escape(l["title"])}</h2><p>{html.escape(l["body"])}</p>'+
+                     (f'<p><small>Source: <a href="{html.escape(l["source_url"],quote=True)}">{html.escape(l["source_title"] or l["source_url"])}</a> · verified {html.escape(l["verified_on"] or "date not recorded")}</small></p>' if l["source_url"] else '<p><small>Source not supplied; instructor-authored content.</small></p>')+
+                     f'<button onclick="start({l["id"]})">Practice this lesson</button></article>' for l in lessons())
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Studywell · Learning</title><style>
     *{{box-sizing:border-box}}body{{margin:0;background:#f5f7fb;color:#19253a;font:16px/1.6 system-ui,sans-serif}}main{{max-width:850px;margin:auto;padding:32px 20px}}header{{padding:24px 0}}.tag{{font-weight:700;color:#365fc2;font-size:12px;letter-spacing:.1em}}h1{{font-size:clamp(30px,5vw,44px);margin:8px 0}}article,.quiz{{background:white;border:1px solid #dfe5f0;border-radius:14px;padding:22px;margin:16px 0;box-shadow:0 8px 24px #1a2b4b0b}}p{{color:#52617a}}button{{background:#315dc2;color:white;border:0;border-radius:8px;padding:10px 14px;font:inherit;font-weight:650;cursor:pointer}}button:focus,input:focus{{outline:3px solid #a8c1ff;outline-offset:2px}}fieldset{{border:1px solid #dfe5f0;border-radius:10px;margin:14px 0;padding:14px}}label{{display:block;padding:6px}}#feedback{{font-weight:650}}@media(prefers-reduced-motion:reduce){{*{{scroll-behavior:auto!important}}}}
     </style></head><body><main><header><div class="tag">STUDYWELL · LEARN WITH EVIDENCE</div><h1>Small lessons. Clear progress.</h1><p>Practice at your pace. Your answers stay in the local database.</p></header>{cards}<section class="quiz" id="quiz" hidden><h2>Quick practice</h2><div id="questions"></div><div id="feedback" role="status" aria-live="polite"></div></section><section class="quiz"><h2>Your progress</h2><p id="progress">Loading progress…</p><ul id="topics"></ul></section><p><a href="/docs">API reference</a></p></main><script>

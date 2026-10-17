@@ -1,5 +1,7 @@
 # Developer and Office Automation Toolkit
 
+See [RECOVERY.md](RECOVERY.md) for backup verification and restore guidance.
+
 Small Python utilities for repetitive file and spreadsheet work. Tools are safe by default: file organization prints a plan unless `--apply` is passed. The examples operate on user-selected paths and never delete source files.
 
 ## Requirements

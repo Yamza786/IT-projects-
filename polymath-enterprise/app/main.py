@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import sqlite3
 from contextlib import closing
@@ -12,7 +13,7 @@ from statistics import median
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
 DB_PATH = Path(os.environ.get("ENTERPRISE_DB", "enterprise.db"))
@@ -357,6 +358,20 @@ def integration_feed(after_id: int = 0, limit: int = 100, _: dict = Depends(requ
              "occurred_at":entry["created_at"],
              "payload":{"entity":entry["entity"],"entity_id":entry["entity_id"],"detail":entry["detail"],"actor_role":entry["actor_role"]}}
             for entry in entries]
+
+
+@app.get("/api/backup")
+def export_backup(_: dict = Depends(require_role("admin"))):
+    """Create a consistent read-only JSON backup for restore drills."""
+    tables=("customers","products","sales","sale_items","expenses","stock_ledger","audit_log",
+            "security_reports","security_alerts","research_evidence")
+    with closing(connect()) as db:
+        db.execute("BEGIN")
+        snapshot={table:[dict(row) for row in db.execute(f"SELECT * FROM {table} ORDER BY id")] for table in tables}
+        db.commit()
+    payload={"format":"polymath-enterprise-backup-v1","created_at":datetime.now(timezone.utc).isoformat(timespec="seconds"),"data":snapshot}
+    return Response(json.dumps(payload,ensure_ascii=False,indent=2),media_type="application/json",
+                    headers={"Content-Disposition":"attachment; filename=polymath-enterprise-backup.json","Cache-Control":"no-store"})
 
 
 @app.get("/",response_class=HTMLResponse)

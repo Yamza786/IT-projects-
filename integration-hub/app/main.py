@@ -9,7 +9,6 @@ import os
 import re
 import sqlite3
 import time
-from collections import defaultdict, deque
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +22,6 @@ WRITE_KEY = os.environ.get("HUB_WRITE_KEY", "")
 READ_KEY = os.environ.get("HUB_READ_KEY", "")
 RATE_LIMIT = max(10, int(os.environ.get("HUB_RATE_LIMIT", "120")))
 app = FastAPI(title="Integration Hub", version="1.0.0")
-requests_by_key: dict[str, deque[float]] = defaultdict(deque)
 
 
 def connect():
@@ -39,6 +37,9 @@ def init():
             id INTEGER PRIMARY KEY,source TEXT NOT NULL,external_id TEXT NOT NULL,kind TEXT NOT NULL,
             occurred_at TEXT NOT NULL,payload TEXT NOT NULL,idempotency_key TEXT NOT NULL UNIQUE,received_at TEXT NOT NULL,
             UNIQUE(source,external_id,kind))""")
+        db.execute("""CREATE TABLE IF NOT EXISTS rate_limits(
+            key_fingerprint TEXT NOT NULL,minute_bucket INTEGER NOT NULL,request_count INTEGER NOT NULL,
+            PRIMARY KEY(key_fingerprint,minute_bucket))""")
         db.commit()
 
 
@@ -49,17 +50,24 @@ def startup():
 
 def authorize(scope: Literal["read", "write"]):
     def dependency(request: Request, x_api_key: str | None = Header(default=None)):
-        configured = WRITE_KEY if scope == "write" else (READ_KEY or WRITE_KEY)
-        if not configured or not x_api_key or not hmac.compare_digest(x_api_key, configured):
+        env_name="HUB_WRITE_KEYS" if scope=="write" else "HUB_READ_KEYS"
+        legacy=WRITE_KEY if scope=="write" else (READ_KEY or WRITE_KEY)
+        configured=os.environ.get(env_name,legacy)
+        valid_keys=[value.strip() for value in configured.split(",") if value.strip()]
+        if not x_api_key or not any(hmac.compare_digest(x_api_key,key) for key in valid_keys):
             raise HTTPException(401, "Valid API key required")
-        fingerprint = hashlib.sha256(x_api_key.encode()).hexdigest()[:16]
-        now = time.monotonic()
-        stamps = requests_by_key[fingerprint]
-        while stamps and now - stamps[0] >= 60:
-            stamps.popleft()
-        if len(stamps) >= RATE_LIMIT:
-            raise HTTPException(429, "Rate limit exceeded", headers={"Retry-After": "60"})
-        stamps.append(now)
+        fingerprint = hashlib.sha256(x_api_key.encode()).hexdigest()
+        bucket=int(time.time()//60)
+        with closing(connect()) as db:
+            db.execute("BEGIN IMMEDIATE")
+            row=db.execute("SELECT request_count FROM rate_limits WHERE key_fingerprint=? AND minute_bucket=?",(fingerprint,bucket)).fetchone()
+            if row and row["request_count"]>=RATE_LIMIT:
+                db.rollback()
+                raise HTTPException(429, "Rate limit exceeded", headers={"Retry-After": str(60-int(time.time()%60))})
+            db.execute("INSERT INTO rate_limits(key_fingerprint,minute_bucket,request_count) VALUES(?,?,1) ON CONFLICT(key_fingerprint,minute_bucket) DO UPDATE SET request_count=request_count+1",(fingerprint,bucket))
+            if bucket%60==0:
+                db.execute("DELETE FROM rate_limits WHERE minute_bucket<?",(bucket-120,))
+            db.commit()
         return {"scope": scope}
     return dependency
 

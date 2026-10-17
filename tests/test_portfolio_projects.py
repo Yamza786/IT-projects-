@@ -44,6 +44,16 @@ def test_polymath_goal_note_graph_and_export(tmp_path):
         graph = client.get("/api/graph").json()
         assert len(graph["nodes"]) == 2 and len(graph["edges"]) == 1
         assert client.get("/api/export").json()["format"] == "polymath-os-json-v1"
+        assert client.put(f"/api/goals/{goal['id']}",json={"title":"Learn SQL deeply","description":"Practice","status":"active"}).json()["title"]=="Learn SQL deeply"
+        backup=client.get("/api/export").json()
+        assert "polymath-os-backup.json" in client.get("/api/export/download").headers["content-disposition"]
+    restore=load_module("polymath-os","test_polymath_restore")
+    restore.DB_PATH=tmp_path/"restored.db"
+    with TestClient(restore.app) as client:
+        imported=client.post("/api/import",json=backup)
+        assert imported.status_code==201 and imported.json()["restored"]["goals"]==1
+        assert len(client.get("/api/graph").json()["nodes"])==2
+        assert client.post("/api/import",json=backup).status_code==409
 
 
 def test_research_assistant_returns_cited_evidence(tmp_path):
@@ -57,20 +67,28 @@ def test_research_assistant_returns_cited_evidence(tmp_path):
         assert answer["answer_mode"] == "retrieval-only"
         assert answer["results"][0]["source_uri"] == "archive:demo"
         assert "traceable source" in answer["results"][0]["excerpt"]
+        imported=client.put("/api/documents/import-text",params={"title":"Imported notes","source_uri":"archive:notes"},
+                            content=b"Markdown source with a verified note.",headers={"Content-Type":"text/markdown"})
+        assert imported.status_code==201
+        evaluation=client.post("/api/evaluate",json={"cases":[{"question":"What makes a claim easier to verify?","relevant_document_ids":[created.json()["id"]]}],"k":3})
+        assert evaluation.status_code==200 and evaluation.json()["mean_recall_at_k"]==1
 
 
 def test_finance_cashflow_and_debt_payment(tmp_path):
     with open_app(tmp_path, "personal-finance", "test_finance") as (client, _):
         assert client.get("/").status_code == 200
         month = date.today().strftime("%Y-%m")
-        client.post("/api/transactions", json={"kind": "income", "category": "Salary", "amount_cents": 200000})
+        transaction=client.post("/api/transactions", json={"kind": "income", "category": "Salary", "amount_cents": 200000}).json()
+        changed=client.put(f"/api/transactions/{transaction['id']}",json={"kind":"income","category":"Salary","amount_cents":210000,"memo":"updated","day":date.today().isoformat()})
+        assert changed.status_code==200 and changed.json()["amount_cents"]==210000
         debt = client.post("/api/debts", json={"name": "Study loan", "balance_cents": 50000}).json()
         paid = client.post(f"/api/debts/{debt['id']}/payments", json={"amount_cents": 10000})
         assert paid.status_code == 201
         summary = client.get("/api/summary", params={"month": month}).json()
-        assert summary["income_cents"] == 200000
+        assert summary["income_cents"] == 210000
         assert summary["expense_cents"] == 10000
         assert client.get("/api/debts").json()[0]["balance_cents"] == 40000
+        assert "finance-transactions.csv" in client.get("/api/transactions.csv").headers["content-disposition"]
 
 
 def test_sme_quote_issue_deducts_stock_atomically(tmp_path):
@@ -79,13 +97,16 @@ def test_sme_quote_issue_deducts_stock_atomically(tmp_path):
         product = client.post("/api/products", json={"sku": "A-1", "name": "Notebook", "unit_price_cents": 2500, "stock": 3}).json()
         customer = client.post("/api/customers", json={"name": "Demo buyer"}).json()
         invoice = client.post("/api/invoices", json={"customer_id": customer["id"], "items":[{"product_id":product["id"],"quantity":2}]}).json()
+        edited=client.put(f"/api/invoices/{invoice['id']}",json={"customer_id":customer["id"],"items":[{"product_id":product["id"],"quantity":1}]})
+        assert edited.status_code==200 and edited.json()["total_cents"]==2500
         issued = client.post(f"/api/invoices/{invoice['id']}/issue")
         assert issued.status_code == 200 and issued.json()["status"] == "issued"
-        assert client.get("/api/products").json()[0]["stock"] == 1
-        assert client.get("/api/stock-ledger").json()[0]["delta"] == -2
-        another = client.post("/api/invoices", json={"customer_id":customer["id"],"items":[{"product_id":product["id"],"quantity":2}]}).json()
+        assert client.get("/api/products").json()[0]["stock"] == 2
+        assert client.get("/api/stock-ledger").json()[0]["delta"] == -1
+        another = client.post("/api/invoices", json={"customer_id":customer["id"],"items":[{"product_id":product["id"],"quantity":3}]}).json()
         assert client.post(f"/api/invoices/{another['id']}/issue").status_code == 409
-        assert client.get("/api/products").json()[0]["stock"] == 1
+        assert client.get("/api/products").json()[0]["stock"] == 2
+        assert "sme-invoices.csv" in client.get("/api/invoices.csv").headers["content-disposition"]
 
 
 def test_sme_role_keys_enforce_reader_manager_admin(tmp_path):
@@ -108,6 +129,12 @@ def test_security_analyzer_flags_and_suppresses_documentation_ip():
     quiet = module.analyze(path, 5, {"192.0.2.44"})
     assert not quiet["alerts"]
     assert quiet["timeline"] and quiet["suppressed_sources"] == ["192.0.2.44"]
+    pam=ROOT/"security-log-analyzer"/"pam-test.log"
+    try:
+        pam.write_text("sshd: authentication failure rhost=203.0.113.8\nsshd: authentication failure rhost=203.0.113.8\n",encoding="utf-8")
+        assert module.analyze(pam,2)["alerts"][0]["source"]=="203.0.113.8"
+    finally:
+        pam.unlink(missing_ok=True)
 
 
 def test_learning_answer_schedules_next_review(tmp_path):
@@ -118,6 +145,13 @@ def test_learning_answer_schedules_next_review(tmp_path):
         response = client.post(f"/api/questions/{question['id']}/answer", json={"selected_index": 0})
         assert response.status_code == 200
         assert response.json()["next_review_on"]
+        lesson_payload={"title":"Source-backed lesson","body":"A short lesson with enough characters to pass the content validation check.",
+            "source_title":"Official manual","source_url":"https://example.org/manual","verified_on":date.today().isoformat(),
+            "questions":[{"prompt":"What is checkable?","options":["Evidence","Guess"],"correct_index":0,"explanation":"Evidence can be checked.","tag":"research"}]}
+        created=client.post("/api/lessons",json=lesson_payload)
+        assert created.status_code==201
+        lesson_payload["title"]="Rejected HTTP source";lesson_payload["source_url"]="http://example.org/manual"
+        assert client.post("/api/lessons",json=lesson_payload).status_code==422
 
 
 def test_legal_research_preserves_source_link_and_document_versions(tmp_path):
@@ -132,6 +166,7 @@ def test_legal_research_preserves_source_link_and_document_versions(tmp_path):
         doc = client.post("/api/documents", json={"case_id":case["id"],"title":"Brief.pdf","version":1})
         assert doc.status_code == 201
         assert client.post(f"/api/documents", json={"case_id":case["id"],"title":"Brief.pdf","version":1}).status_code == 409
+        assert client.get("/api/search",params={"q":"element"}).json()["notes"]
 
 
 def test_booking_requires_account_and_rejects_overlap(tmp_path, monkeypatch):
@@ -142,6 +177,9 @@ def test_booking_requires_account_and_rejects_overlap(tmp_path, monkeypatch):
         assert account.status_code == 201
         login = client.post("/api/login", json={"email":"demo@example.test","password":"long-demo-password"}).json()
         headers = {"Authorization":"Bearer "+login["access_token"]}
+        day=(datetime.now(timezone.utc)+timedelta(days=3)).date()
+        assert client.put(f"/api/calendar/{day.weekday()}",json={"opens":"10:00","closes":"12:00","enabled":True},headers={"X-Admin-Key":"unused-admin-key"}).status_code==200
+        assert client.get("/api/calendar").status_code==200
         start = (datetime.now(timezone.utc)+timedelta(days=3)).replace(hour=10,minute=0,second=0,microsecond=0)
         body = {"service_id":1,"starts_at":start.isoformat()}
         assert client.post("/api/bookings", json=body, headers=headers).status_code == 201
@@ -185,6 +223,9 @@ def test_enterprise_roles_atomic_sale_and_security_import(tmp_path):
         report={"input_sha256":"a"*64,"events_parsed":3,"alerts":[{"rule":"repeated_failures","severity":"medium","source":"192.0.2.1","failure_count":5,"success_count":0,"evidence_lines":[1,2,3]}]}
         assert client.post("/api/security-reports",json=report,headers=admin).status_code==201
         assert client.get("/api/security-reports",headers=reader).json()[0]["alerts"][0]["source"]=="192.0.2.1"
+        assert client.get("/api/backup",headers=reader).status_code==403
+        backup=client.get("/api/backup",headers=admin)
+        assert backup.status_code==200 and backup.json()["format"]=="polymath-enterprise-backup-v1"
 
 
 def test_csv_and_open_data_tools_validate_synthetic_inputs(tmp_path):
@@ -228,8 +269,9 @@ def test_automation_preview_grouped_report_and_backup(tmp_path,monkeypatch):
 def test_contribution_showcase_and_finance_scenario(tmp_path,monkeypatch):
     spec=importlib.util.spec_from_file_location("test_contributions",ROOT/"contribution-portfolio"/"contributions.py")
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    markdown=module.markdown([{"project":"demo","date":"2026-10-17","summary":"Fixed a parser edge case","lesson":"Reproduced before editing","issue_url":"https://github.com/a/b/issues/1","pr_url":""}])
+    markdown=module.markdown([{"project":"demo","date":"2026-10-17","summary":"Fixed a parser edge case","lesson":"Reproduced before editing","issue_url":"https://github.com/a/b/issues/1","pr_url":"","review_status":"merged","verification":"reviewed"}])
     assert "Fixed a parser edge case" in markdown and "issues/1" in markdown
+    assert "Review status: merged" in markdown and "Verification: reviewed" in markdown
     module.DATA_PATH=tmp_path/"contributions.json"
     monkeypatch.setattr(sys,"argv",["contributions.py","add","--project","demo","--issue-url","https://github.com/a/b/issues/2","--summary","Reproduced a bug","--lesson","Read the existing flow"])
     assert module.main()==0 and json.loads(module.DATA_PATH.read_text())[0]["project"]=="demo"

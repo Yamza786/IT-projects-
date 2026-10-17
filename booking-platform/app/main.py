@@ -75,8 +75,11 @@ def init():
             CREATE TABLE IF NOT EXISTS sessions(id INTEGER PRIMARY KEY,account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
                 token_hash TEXT NOT NULL UNIQUE,expires_at TEXT NOT NULL,created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS bookings(id INTEGER PRIMARY KEY,service_id INTEGER NOT NULL REFERENCES services(id),customer_id INTEGER NOT NULL REFERENCES customers(id),starts_at_utc TEXT NOT NULL,ends_at_utc TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'confirmed' CHECK(status IN ('confirmed','cancelled')),created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS calendar_rules(weekday INTEGER PRIMARY KEY CHECK(weekday BETWEEN 0 AND 6),open_minute INTEGER NOT NULL,close_minute INTEGER NOT NULL,enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)));
             CREATE INDEX IF NOT EXISTS booking_time_idx ON bookings(status,starts_at_utc,ends_at_utc);
         """)
+        if not db.execute("SELECT 1 FROM calendar_rules LIMIT 1").fetchone():
+            db.executemany("INSERT INTO calendar_rules(weekday,open_minute,close_minute,enabled) VALUES(?,540,1020,1)",[(day,) for day in range(7)])
         if not db.execute("SELECT 1 FROM services LIMIT 1").fetchone():
             db.execute("INSERT INTO services(name,description,duration_minutes,price_cents) VALUES('Discovery session','A sample 30-minute consultation.',30,0)")
         db.commit()
@@ -92,6 +95,19 @@ class ServiceIn(BaseModel):
     description: str = Field(default="", max_length=1000)
     duration_minutes: int = Field(ge=5, le=480)
     price_cents: int = Field(ge=0)
+
+
+class CalendarRuleIn(BaseModel):
+    opens: str = Field(regex=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    closes: str = Field(regex=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    enabled: bool = True
+
+    def minutes(self):
+        start=clock_time.fromisoformat(self.opens)
+        end=clock_time.fromisoformat(self.closes)
+        if (end.hour*60+end.minute)-(start.hour*60+start.minute)<5:
+            raise ValueError("Calendar must be open for at least five minutes")
+        return start.hour*60+start.minute,end.hour*60+end.minute
 
 
 class BookingIn(BaseModel):
@@ -191,6 +207,29 @@ def add_service(item: ServiceIn, _: bool = Depends(require_admin)):
         return dict(db.execute("SELECT * FROM services WHERE id=?", (cur.lastrowid,)).fetchone())
 
 
+@app.get("/api/calendar")
+def get_calendar():
+    with closing(connect()) as db:
+        rows=[dict(r) for r in db.execute("SELECT * FROM calendar_rules ORDER BY weekday")]
+    return [{"weekday":r["weekday"],"opens":f"{r['open_minute']//60:02d}:{r['open_minute']%60:02d}",
+             "closes":f"{r['close_minute']//60:02d}:{r['close_minute']%60:02d}","enabled":bool(r["enabled"])} for r in rows]
+
+
+@app.put("/api/calendar/{weekday}")
+def set_calendar(weekday: int, item: CalendarRuleIn, _: bool = Depends(require_admin)):
+    if not 0<=weekday<=6:
+        raise HTTPException(422,"weekday must be 0 (Monday) through 6 (Sunday)")
+    try:
+        opens,closes=item.minutes()
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    with closing(connect()) as db:
+        db.execute("INSERT INTO calendar_rules(weekday,open_minute,close_minute,enabled) VALUES(?,?,?,?) ON CONFLICT(weekday) DO UPDATE SET open_minute=excluded.open_minute,close_minute=excluded.close_minute,enabled=excluded.enabled",
+                   (weekday,opens,closes,int(item.enabled)))
+        db.commit()
+    return {"weekday":weekday,"opens":item.opens,"closes":item.closes,"enabled":item.enabled}
+
+
 @app.post("/api/bookings", status_code=201)
 def create_booking(item: BookingIn, account: dict = Depends(current_account), _: bool = Depends(check_public_rate)):
     if item.starts_at.tzinfo is None or item.starts_at.utcoffset() is None:
@@ -205,9 +244,10 @@ def create_booking(item: BookingIn, account: dict = Depends(current_account), _:
             db.rollback()
             raise HTTPException(404, "Service not found")
         local_minute=item.starts_at.hour*60+item.starts_at.minute
-        if item.starts_at.minute not in (0,30) or item.starts_at.second or item.starts_at.microsecond or local_minute<9*60 or local_minute+service["duration_minutes"]>17*60:
+        rule=db.execute("SELECT * FROM calendar_rules WHERE weekday=? AND enabled=1",(item.starts_at.weekday(),)).fetchone()
+        if not rule or item.starts_at.second or item.starts_at.microsecond or local_minute<rule["open_minute"] or (local_minute-rule["open_minute"])%30 or local_minute+service["duration_minutes"]>rule["close_minute"]:
             db.rollback()
-            raise HTTPException(422,"Choose a 30-minute slot between 09:00 and 17:00 in the submitted timezone")
+            raise HTTPException(422,"Choose a 30-minute slot inside this weekday's configured hours in the submitted timezone")
         ends = starts.timestamp() + service["duration_minutes"] * 60
         start_iso = starts.isoformat(timespec="seconds")
         end_iso = datetime.fromtimestamp(ends, timezone.utc).isoformat(timespec="seconds")
@@ -234,9 +274,12 @@ def availability(service_id: int = Query(gt=0), day: date = Query(), timezone_na
         service=db.execute("SELECT * FROM services WHERE id=? AND active=1",(service_id,)).fetchone()
         if not service:
             raise HTTPException(404,"Service not found")
+        rule=db.execute("SELECT * FROM calendar_rules WHERE weekday=? AND enabled=1",(day.weekday(),)).fetchone()
         existing=[(datetime.fromisoformat(r[0]),datetime.fromisoformat(r[1])) for r in db.execute("SELECT starts_at_utc,ends_at_utc FROM bookings WHERE status='confirmed'")]
     slots=[]
-    for minute in range(9*60,17*60-service["duration_minutes"]+1,30):
+    if not rule:
+        return {"service_id":service_id,"day":day.isoformat(),"timezone":timezone_name,"slots":[],"availability_rule":"This weekday is closed."}
+    for minute in range(rule["open_minute"],rule["close_minute"]-service["duration_minutes"]+1,30):
         naive=datetime.combine(day,clock_time(minute//60,minute%60))
         local=naive.replace(tzinfo=zone)
         if local.astimezone(timezone.utc).astimezone(zone).replace(tzinfo=None)!=naive:
@@ -249,7 +292,7 @@ def availability(service_id: int = Query(gt=0), day: date = Query(), timezone_na
             continue
         slots.append(local.isoformat(timespec="minutes"))
     return {"service_id":service_id,"day":day.isoformat(),"timezone":timezone_name,"slots":slots,
-            "availability_rule":"Weekdays are not restricted; daily slots are 09:00–17:00 local time at 30-minute intervals."}
+            "availability_rule":f"Configured weekday hours; slots start every 30 minutes in {timezone_name}."}
 
 
 @app.get("/api/bookings")

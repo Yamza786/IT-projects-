@@ -10,7 +10,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-ADDRESS = re.compile(r"\bfrom\s+([0-9a-fA-F:.]+)\b")
+ADDRESS = re.compile(r"\b(?:from\s+|rhost=)([0-9a-fA-F:.]+)\b")
 FAILED = re.compile(r"Failed password|authentication failure|Invalid user")
 ACCEPTED = re.compile(r"Accepted (?:password|publickey|keyboard-interactive)")
 
@@ -65,20 +65,36 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log_file", type=Path)
     parser.add_argument("--threshold", type=int, default=5, help="failure events needed for an alert (default: 5)")
+    parser.add_argument("--rules", type=Path, help="JSON rule pack with threshold and suppressed_sources")
     parser.add_argument("--json", type=Path, help="write the report as JSON")
     parser.add_argument("--suppress", action="append", default=[], metavar="IP", help="suppress alerts for a reviewed address; may be repeated")
     parser.add_argument("--note", action="append", default=[], help="include an incident-response note in the JSON report; may be repeated")
     args = parser.parse_args()
-    if args.threshold < 2:
+    threshold=args.threshold
+    rule_suppress=[]
+    if args.rules:
+        try:
+            config=json.loads(args.rules.read_text(encoding="utf-8"))
+            if not isinstance(config,dict) or set(config)-{"threshold","suppressed_sources"}:
+                raise ValueError("rule pack only accepts threshold and suppressed_sources")
+            threshold=config.get("threshold",threshold)
+            rule_suppress=config.get("suppressed_sources",[])
+            if isinstance(threshold,bool) or not isinstance(threshold,int) or threshold<2:
+                raise ValueError("threshold must be an integer of at least 2")
+            if not isinstance(rule_suppress,list) or any(not isinstance(value,str) for value in rule_suppress):
+                raise ValueError("suppressed_sources must be an array of IP strings")
+        except (OSError,json.JSONDecodeError,ValueError) as exc:
+            parser.error(f"invalid rule pack: {exc}")
+    if threshold < 2:
         parser.error("--threshold must be at least 2")
     if not args.log_file.is_file():
         parser.error(f"not a file: {args.log_file}")
     try:
-        suppress = {str(ipaddress.ip_address(value)) for value in args.suppress}
+        suppress = {str(ipaddress.ip_address(value)) for value in [*args.suppress,*rule_suppress]}
     except ValueError as exc:
         parser.error(f"invalid --suppress address: {exc}")
     try:
-        report = analyze(args.log_file, args.threshold, suppress)
+        report = analyze(args.log_file, threshold, suppress)
     except OSError as exc:
         print(f"Could not read log: {exc}", file=sys.stderr)
         return 2

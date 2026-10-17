@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import html
+import csv
+import io
 import hmac
 import os
 import sqlite3
@@ -13,6 +15,7 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 DB_PATH = Path(os.environ.get("SME_DB", "sme.db"))
@@ -168,6 +171,33 @@ def create_invoice(item: InvoiceIn, actor: dict = Depends(require_role("manager"
         return invoice_detail(db, invoice_id)
 
 
+@app.put("/api/invoices/{invoice_id}")
+def edit_draft_invoice(invoice_id: int, item: InvoiceIn, actor: dict = Depends(require_role("manager"))):
+    """Replace a quote's customer and lines before issue; issued invoices are immutable."""
+    with closing(connect()) as db:
+        db.execute("BEGIN IMMEDIATE")
+        invoice=db.execute("SELECT * FROM invoices WHERE id=?",(invoice_id,)).fetchone()
+        if not invoice:
+            db.rollback(); raise HTTPException(404,"Quote not found")
+        if invoice["status"]!="draft":
+            db.rollback(); raise HTTPException(409,"Only a draft quote can be edited")
+        if not db.execute("SELECT 1 FROM customers WHERE id=?",(item.customer_id,)).fetchone():
+            db.rollback(); raise HTTPException(404,"Customer not found")
+        try:
+            db.execute("DELETE FROM invoice_items WHERE invoice_id=?",(invoice_id,))
+            for line in item.items:
+                product=db.execute("SELECT * FROM products WHERE id=? AND active=1",(line.product_id,)).fetchone()
+                if not product: raise HTTPException(404,f"Product {line.product_id} not found")
+                db.execute("INSERT INTO invoice_items(invoice_id,product_id,description,quantity,unit_price_cents) VALUES(?,?,?,?,?)",
+                           (invoice_id,product["id"],product["name"],line.quantity,product["unit_price_cents"]))
+            db.execute("UPDATE invoices SET customer_id=? WHERE id=?",(item.customer_id,invoice_id))
+            audit(db,"quote_edited","invoice",invoice_id,f"{actor['role']} replaced draft quote lines")
+            db.commit()
+        except Exception:
+            db.rollback(); raise
+        return invoice_detail(db,invoice_id)
+
+
 @app.post("/api/products/{product_id}/adjustments", status_code=201)
 def adjust_stock(product_id: int, item: StockAdjustmentIn, actor: dict = Depends(require_role("manager"))):
     if item.delta == 0:
@@ -215,6 +245,20 @@ def invoices(limit: int = Query(default=100, ge=1, le=500), _: dict = Depends(re
     with closing(connect()) as db:
         ids = [r[0] for r in db.execute("SELECT id FROM invoices ORDER BY id DESC LIMIT ?", (limit,))]
         return [invoice_detail(db, invoice_id) for invoice_id in ids]
+
+
+@app.get("/api/invoices.csv")
+def export_invoices(limit: int = Query(default=5000,ge=1,le=50000), _: dict = Depends(require_role("reader"))):
+    output=io.StringIO(newline=""); writer=csv.writer(output)
+    writer.writerow(("invoice_id","customer","status","created_at","paid_at","total_cents","line_items"))
+    with closing(connect()) as db:
+        ids=[r[0] for r in db.execute("SELECT id FROM invoices ORDER BY id LIMIT ?",(limit,))]
+        for invoice_id in ids:
+            item=invoice_detail(db,invoice_id)
+            lines="; ".join(f"{line['quantity']} x {line['description']}" for line in item["items"])
+            writer.writerow((item["id"],item["customer_name"],item["status"],item["created_at"],item["paid_at"] or "",item["total_cents"],lines))
+    return Response(output.getvalue(),media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition":"attachment; filename=sme-invoices.csv"})
 
 
 @app.post("/api/invoices/{invoice_id}/issue")

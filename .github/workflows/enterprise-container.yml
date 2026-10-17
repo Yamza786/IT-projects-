@@ -21,6 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate hardened Compose configuration
+        run: |
+          cp devops-demo/.env.production.example devops-demo/.env.production
+          docker compose -f devops-demo/compose.yaml config --quiet
+          rm devops-demo/.env.production
       - name: Build container
         run: docker build -f devops-demo/Dockerfile -t polymath-enterprise:ci .
       - name: Start container

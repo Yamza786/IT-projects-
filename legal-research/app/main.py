@@ -92,6 +92,21 @@ def cases():
     return all_rows("SELECT * FROM cases ORDER BY id DESC")
 
 
+@app.get("/api/search")
+def search(q: str = Query(min_length=2,max_length=200), limit: int = Query(default=50,ge=1,le=200)):
+    """Search stored matter records and return IDs so results can be opened in context."""
+    term="%"+q.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%"
+    queries={
+        "cases":("SELECT id,title,reference AS excerpt FROM cases WHERE title LIKE ? ESCAPE '\\' OR reference LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT ?",(term,term,limit)),
+        "sources":("SELECT id,case_id,title,locator AS excerpt FROM sources WHERE title LIKE ? ESCAPE '\\' OR issuer LIKE ? ESCAPE '\\' OR locator LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT ?",(term,term,term,limit)),
+        "notes":("SELECT id,case_id,source_id,claim AS title,passage AS excerpt FROM notes WHERE claim LIKE ? ESCAPE '\\' OR passage LIKE ? ESCAPE '\\' OR note LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT ?",(term,term,term,limit)),
+        "documents":("SELECT id,case_id,title,locator AS excerpt FROM documents WHERE title LIKE ? ESCAPE '\\' OR locator LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT ?",(term,term,limit)),
+        "deadlines":("SELECT id,case_id,title,due_on AS excerpt FROM deadlines WHERE title LIKE ? ESCAPE '\\' ORDER BY due_on LIMIT ?",(term,limit)),
+    }
+    with closing(connect()) as db:
+        return {kind:[dict(row) for row in db.execute(sql,params)] for kind,(sql,params) in queries.items()}
+
+
 @app.post("/api/cases", status_code=201)
 def add_case(item: CaseIn):
     with closing(connect()) as db:

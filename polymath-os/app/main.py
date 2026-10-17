@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
 DB_PATH = Path(os.environ.get("POLYMATH_DB", "polymath.db"))
@@ -125,6 +125,20 @@ def create_item(table: str, fields: dict) -> dict:
             raise HTTPException(status_code=409, detail="That item conflicts with an existing record.") from exc
 
 
+def update_item(table: str, item_id: int, fields: dict) -> dict:
+    allowed = {"goals":{"title","description","status"},"projects":{"title","description","status","goal_id"},
+               "notes":{"title","body","tags"}}
+    if table not in allowed or not set(fields).issubset(allowed[table]):
+        raise ValueError("Unsupported editable table")
+    with closing(connect()) as db:
+        if not db.execute(f"SELECT 1 FROM {table} WHERE id=?",(item_id,)).fetchone():
+            raise HTTPException(404,"Item not found")
+        columns=list(fields)
+        db.execute(f"UPDATE {table} SET {','.join(f'{key}=?' for key in columns)} WHERE id=?",tuple(fields[k] for k in columns)+(item_id,))
+        db.commit()
+        return dict(db.execute(f"SELECT * FROM {table} WHERE id=?",(item_id,)).fetchone())
+
+
 @app.get("/api/dashboard")
 def dashboard() -> dict:
     with closing(connect()) as db:
@@ -158,6 +172,11 @@ def add_goal(item: GoalIn) -> dict:
     return create_item("goals", item.dict())
 
 
+@app.put("/api/goals/{goal_id}")
+def update_goal(goal_id: int, item: GoalIn) -> dict:
+    return update_item("goals", goal_id, item.dict())
+
+
 @app.get("/api/projects")
 def get_projects() -> list[dict]:
     return rows("projects")
@@ -172,6 +191,15 @@ def add_project(item: ProjectIn) -> dict:
     return create_item("projects", data)
 
 
+@app.put("/api/projects/{project_id}")
+def update_project(project_id: int, item: ProjectIn) -> dict:
+    data=item.dict()
+    with closing(connect()) as db:
+        if data["goal_id"] is not None and not db.execute("SELECT 1 FROM goals WHERE id=?",(data["goal_id"],)).fetchone():
+            raise HTTPException(404,"Goal not found")
+    return update_item("projects",project_id,data)
+
+
 @app.get("/api/notes")
 def get_notes() -> list[dict]:
     return rows("notes")
@@ -180,6 +208,11 @@ def get_notes() -> list[dict]:
 @app.post("/api/notes", status_code=201)
 def add_note(item: NoteIn) -> dict:
     return create_item("notes", item.dict())
+
+
+@app.put("/api/notes/{note_id}")
+def update_note(note_id: int, item: NoteIn) -> dict:
+    return update_item("notes",note_id,item.dict())
 
 
 @app.get("/api/habits")
@@ -315,6 +348,47 @@ def export_data() -> dict:
     with closing(connect()) as db:
         return {"format":"polymath-os-json-v1","exported_at":datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "data":{table:[dict(row) for row in db.execute(f"SELECT * FROM {table} ORDER BY id")] for table in tables}}
+
+
+@app.get("/api/export/download")
+def download_export():
+    import json
+    return Response(json.dumps(export_data(),ensure_ascii=False,indent=2),media_type="application/json",
+                    headers={"Content-Disposition":"attachment; filename=polymath-os-backup.json"})
+
+
+@app.post("/api/import",status_code=201)
+def import_backup(payload: dict):
+    """Restore a Polymath JSON backup into a fresh workspace, preserving links and IDs."""
+    tables=("goals","projects","notes","habits","check_ins","links","reminders")
+    columns={"goals":{"id","title","description","status","created_at"},
+             "projects":{"id","title","description","status","goal_id","created_at"},
+             "notes":{"id","title","body","tags","created_at"},
+             "habits":{"id","title","created_at"},"check_ins":{"id","habit_id","day"},
+             "links":{"id","source_type","source_id","target_type","target_id","label"},
+             "reminders":{"id","title","due_at","entity_type","entity_id","done","created_at"}}
+    if payload.get("format")!="polymath-os-json-v1" or not isinstance(payload.get("data"),dict):
+        raise HTTPException(422,"Expected a polymath-os-json-v1 backup")
+    data=payload["data"]
+    if set(data)!=set(tables) or any(not isinstance(data[t],list) for t in tables):
+        raise HTTPException(422,"Backup must contain every supported table as an array")
+    if sum(len(data[t]) for t in tables)>50000:
+        raise HTTPException(413,"Backup exceeds the 50,000-record import limit")
+    with closing(connect()) as db:
+        db.execute("BEGIN IMMEDIATE")
+        if any(db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() for table in tables):
+            db.rollback(); raise HTTPException(409,"Import is only allowed into a fresh workspace")
+        try:
+            for table in tables:
+                for row in data[table]:
+                    if not isinstance(row,dict) or not set(row).issubset(columns[table]) or not {"id"}.issubset(row):
+                        raise ValueError(f"Invalid {table} record")
+                    keys=list(row)
+                    db.execute(f"INSERT INTO {table} ({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})",[row[k] for k in keys])
+            db.commit()
+        except (sqlite3.IntegrityError,ValueError,TypeError) as exc:
+            db.rollback(); raise HTTPException(422,f"Backup records are invalid: {exc}") from exc
+    return {"restored":{table:len(data[table]) for table in tables},"format":"polymath-os-json-v1"}
 
 
 def e(value: object) -> str:

@@ -1,0 +1,4 @@
+{
+  "threshold": 5,
+  "suppressed_sources": ["192.0.2.44"]
+}
