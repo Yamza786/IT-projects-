@@ -1,0 +1,4 @@
+id,kind,room
+demo-lamp,light,living-room
+demo-switch,switch,office
+demo-thermostat,thermostat,bedroom

@@ -1,0 +1,17 @@
+{
+  "name": "RelayArena.Runtime",
+  "rootNamespace": "RelayArena",
+  "references": [
+    "Unity.Netcode.Runtime",
+    "Unity.Netcode.Transports.UTP"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

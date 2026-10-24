@@ -1,0 +1,7 @@
+aws_region  = "af-south-1"
+bucket_name = "replace-with-globally-unique-name"
+tags = {
+  Project   = "portfolio-infrastructure"
+  ManagedBy = "OpenTofu"
+  Owner     = "team-example"
+}

@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "com.unity.netcode.gameobjects": "2.13.3",
+    "com.unity.test-framework": "1.4.6",
+    "com.unity.transport": "2.6.0"
+  }
+}

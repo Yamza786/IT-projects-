@@ -1,0 +1,15 @@
+name: iOS Study Planner
+on:
+  push:
+    paths: ['ios-study-planner/**', '.github/workflows/ios-study-planner.yml']
+  pull_request:
+    paths: ['ios-study-planner/**', '.github/workflows/ios-study-planner.yml']
+jobs:
+  swift:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: ios-study-planner
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test

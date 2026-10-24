@@ -1,0 +1,36 @@
+name: Pipeline Forge checks
+
+on:
+  push:
+    paths:
+      - "cicd-automation-platform/**"
+      - ".github/workflows/cicd-automation-platform.yml"
+  pull_request:
+    paths:
+      - "cicd-automation-platform/**"
+      - ".github/workflows/cicd-automation-platform.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: cicd-automation-platform/go.sum
+      - name: Test and inspect
+        working-directory: cicd-automation-platform
+        run: |
+          test -z "$(gofmt -l .)"
+          go test -race ./...
+          go vet ./...
+          go mod verify
+          go run ./cmd/cicdctl validate pipeline.example.yaml
+          go run ./cmd/cicdctl plan pipeline.example.yaml
+      - name: Run sample in Docker worker
+        working-directory: cicd-automation-platform
+        run: go run ./cmd/cicdctl run pipeline.example.yaml

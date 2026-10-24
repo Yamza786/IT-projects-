@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Defensive SIEM | Analyst Console</title>
+  <link rel="stylesheet" href="/web/styles.css">
+  <script defer src="/web/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div><p class="eyebrow">DEFENSIVE MONITORING</p><h1>Signal Desk</h1></div>
+    <div class="connection"><span id="health-dot" class="dot"></span><span id="health-label">Checking service…</span></div>
+  </header>
+  <main>
+    <section class="panel auth-panel" aria-labelledby="connect-title">
+      <div><h2 id="connect-title">Analyst session</h2><p>Enter the local API bearer token. It stays in this page's memory and is not saved.</p></div>
+      <div class="token-row"><label class="visually-hidden" for="token">API bearer token</label><input id="token" type="password" autocomplete="off" placeholder="SIEM_API_TOKEN"><button id="connect">Connect</button><button id="refresh" class="secondary" disabled>Refresh</button></div>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="metrics" aria-label="Alert summary">
+      <article class="metric"><span>Open alerts</span><strong id="open-count">—</strong></article>
+      <article class="metric"><span>Events retained</span><strong id="event-count">—</strong></article>
+      <article class="metric"><span>Detection rules</span><strong>2</strong></article>
+    </section>
+
+    <section class="layout">
+      <article class="panel event-panel">
+        <h2>Ingest a synthetic event</h2>
+        <p>Use fabricated data to exercise the defensive pipeline.</p>
+        <form id="event-form">
+          <label>Source<input name="source" value="auth-demo" maxlength="80" required></label>
+          <label>Actor<input name="actor" value="analyst-test" maxlength="120" required></label>
+          <label>Action<select name="action"><option value="failed_login">Failed login</option><option value="privilege_change">Privilege change</option><option value="login">Login</option></select></label>
+          <label>Outcome<select name="outcome"><option value="failure">Failure</option><option value="success">Success</option><option value="denied">Denied</option></select></label>
+          <label>Source IP<input name="source_ip" value="192.0.2.10" maxlength="45"></label>
+          <button type="submit">Send event</button>
+        </form>
+      </article>
+      <article class="panel">
+        <div class="section-head"><div><h2>Alert queue</h2><p>Rule matches from the local event stream.</p></div><label class="filter-label">Status<select id="status-filter"><option value="open">Open</option><option value="acknowledged">Acknowledged</option><option value="resolved">Resolved</option><option value="">All</option></select></label></div>
+        <div id="alerts" class="alert-list" aria-live="polite"><p class="empty">Connect to view alerts.</p></div>
+      </article>
+    </section>
+    <section class="panel events-panel"><h2>Recent events</h2><div class="table-wrap"><table><thead><tr><th>Received</th><th>Source</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Address</th></tr></thead><tbody id="events"><tr><td colspan="6" class="empty">Connect to view events.</td></tr></tbody></table></div></section>
+    <footer><p>Local learning MVP · Defensive use only · Synthetic event data · API details are in the repository's API.md.</p></footer>
+  </main>
+</body>
+</html>

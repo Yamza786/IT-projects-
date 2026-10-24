@@ -1,0 +1,27 @@
+{
+  "name": "enterprise-saas-management",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant SaaS administration API built with TypeScript and SQLite.",
+  "engines": { "node": ">=24.15" },
+  "scripts": {
+    "dev": "npm run build && node --env-file-if-exists=.env dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "migrate": "npm run build && node --env-file-if-exists=.env dist/migrate.js",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,25 @@
+name: Linux system administration toolkit checks
+
+on:
+  push:
+    paths:
+      - "linux-system-admin-toolkit/**"
+      - ".github/workflows/linux-system-admin-toolkit.yml"
+  pull_request:
+    paths:
+      - "linux-system-admin-toolkit/**"
+      - ".github/workflows/linux-system-admin-toolkit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shell analysis tools
+        run: sudo apt-get update && sudo apt-get install -y shellcheck jq
+      - name: Lint and run temporary-fixture tests
+        working-directory: linux-system-admin-toolkit
+        run: make lint test

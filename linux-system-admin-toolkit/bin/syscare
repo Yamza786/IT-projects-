@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+json_quote() {
+  local value=${1-}
+  value=${value//\\/\\\\}
+  value=${value//\"/\\\"}
+  value=${value//$'\n'/\\n}
+  value=${value//$'\r'/\\r}
+  value=${value//$'\t'/\\t}
+  printf '"%s"' "$value"
+}
+
+emit() {
+  local event=$1
+  shift
+  local key value
+  printf '{"event":'
+  json_quote "$event"
+  for key in "$@"; do
+    value=${!key-}
+    printf ','
+    json_quote "$key"
+    printf ':'
+    json_quote "$value"
+  done
+  printf '}\n'
+}
+
+fail() {
+  local message=$1
+  printf '{"level":"error","event":"syscare_error","message":'
+  json_quote "$message"
+  printf '}\n' >&2
+  exit 1
+}
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  syscare diagnose [DIRECTORY]
+  syscare inspect DIRECTORY
+  syscare backup SOURCE_DIRECTORY
+  syscare service-check UNIT
+  syscare service-restart UNIT [--apply --confirm]
+  syscare version
+
+Diagnostics and restart previews are read-only. Backups write only beneath
+SYSCARE_BACKUP_DIR (default: ./backups). Service restarts require both flags
+and a SYSCARE_ALLOWED_SERVICES allowlist entry.
+USAGE
+}
+
+valid_unit() {
+  [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9_.@:-]{0,127}$ ]]
+}
+
+diagnose() {
+  local target=${1:-/} available memory
+  [[ -d $target ]] || fail "diagnose target must be an existing directory"
+  available=$(df -Pk -- "$target" | awk 'NR == 2 { print $4 }') || fail "could not read filesystem usage"
+  [[ $available =~ ^[0-9]+$ ]] || fail "could not parse filesystem availability"
+  local check=filesystem status=ok detail="${available} KiB available"
+  if (( available < 1048576 )); then status=warning; fi
+  emit system_check check status detail
+
+  local check=memory status=unavailable detail="/proc/meminfo is not readable"
+  if [[ -r /proc/meminfo ]]; then
+    memory=$(awk '/^MemAvailable:/ { printf "%.0f", $2 * 1024; found = 1 } END { if (!found) exit 1 }' /proc/meminfo) || memory=
+    if [[ $memory =~ ^[0-9]+$ ]]; then
+      detail="${memory} bytes available"
+      status=ok
+    fi
+  fi
+  emit system_check check status detail
+}
+
+inspect_directory() {
+  local target=$1 file_count=0 bytes
+  [[ -d $target && ! -L $target ]] || fail "inspect target must be a real directory"
+  target=$(cd -- "$target" && pwd -P) || fail "could not resolve inspect target"
+  while IFS= read -r -d '' _file; do (( file_count += 1 )); done < <(find "$target" -xdev -type f -print0)
+  bytes=$(du -sb -- "$target" | awk '{ print $1 }') || fail "could not measure directory"
+  [[ $bytes =~ ^[0-9]+$ ]] || fail "could not parse directory size"
+  local event=directory_inspection path=$target files=$file_count total_bytes=$bytes
+  emit "$event" path files total_bytes
+}
+
+backup_directory() {
+  local source=$1 backup_root source_name timestamp archive_name archive_path archive_temp manifest_temp
+  [[ -d $source && ! -L $source ]] || fail "backup source must be a real directory"
+  source=$(cd -- "$source" && pwd -P) || fail "could not resolve backup source"
+  [[ $source != / ]] || fail "refusing to archive the filesystem root"
+
+  backup_root=${SYSCARE_BACKUP_DIR:-"$PWD/backups"}
+  mkdir -p -- "$backup_root" || fail "could not create backup directory"
+  [[ -d $backup_root && ! -L $backup_root ]] || fail "backup destination must be a real directory"
+  backup_root=$(cd -- "$backup_root" && pwd -P) || fail "could not resolve backup directory"
+  [[ $backup_root != "$source" && $backup_root != "$source/"* ]] || fail "backup destination cannot be inside its source"
+
+  local special_file
+  special_file=$(find "$source" -xdev \( -type p -o -type s -o -type b -o -type c \) -print -quit)
+  [[ -z $special_file ]] || fail "backup source contains a special file type"
+
+  source_name=${source##*/}
+  timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+  archive_name="${timestamp}-${source_name}-${BASHPID}.tar.gz"
+  archive_path="$backup_root/$archive_name"
+  [[ ! -e $archive_path && ! -e "$archive_path.sha256" ]] || fail "backup name already exists"
+  archive_temp=$(mktemp "$backup_root/.syscare-${BASHPID}.XXXXXX") || fail "could not create temporary archive"
+  manifest_temp="$archive_path.sha256.tmp.${BASHPID}"
+  trap 'rm -f -- "${archive_temp:-}" "${manifest_temp:-}"' EXIT
+
+  tar -czf "$archive_temp" -C "$source" . || fail "archive creation failed"
+  gzip -t -- "$archive_temp" || fail "archive integrity check failed"
+  tar -tzf "$archive_temp" >/dev/null || fail "archive listing check failed"
+  chmod 600 -- "$archive_temp" || fail "could not secure archive permissions"
+  mv -- "$archive_temp" "$archive_path" || fail "could not publish backup archive"
+  archive_temp=
+  (cd -- "$backup_root" && sha256sum -- "$archive_name") > "$manifest_temp" || fail "could not create checksum manifest"
+  chmod 600 -- "$manifest_temp" || fail "could not secure checksum permissions"
+  mv -- "$manifest_temp" "$archive_path.sha256" || fail "could not publish checksum manifest"
+  manifest_temp=
+  trap - EXIT
+
+  local event=backup_created archive=$archive_path checksum_file="$archive_path.sha256"
+  emit "$event" archive checksum_file
+}
+
+service_check() {
+  local service=$1 state
+  valid_unit "$service" || fail "invalid service unit name"
+  command -v systemctl >/dev/null 2>&1 || fail "systemctl is unavailable on this host"
+  if state=$(systemctl is-active -- "$service" 2>/dev/null); then
+    local event=service_check service_name=$service service_state=$state
+    emit "$event" service_name service_state
+  else
+    state=${state:-inactive_or_unknown}
+    local event=service_check service_name=$service service_state=$state
+    emit "$event" service_name service_state
+    return 3
+  fi
+}
+
+service_restart() {
+  local service=$1 mode=${2:-preview}
+  valid_unit "$service" || fail "invalid service unit name"
+  if [[ $mode != apply ]]; then
+    local event=service_restart_preview service_name=$service command="systemctl restart $service"
+    emit "$event" service_name command
+    return
+  fi
+  [[ ${3:-} == confirm ]] || fail "apply requires both --apply and --confirm"
+  [[ $EUID -eq 0 ]] || fail "service restart apply requires root; no sudo escalation is attempted"
+  local allowlist=${SYSCARE_ALLOWED_SERVICES:-} allowed=0 entry
+  local -a permitted_services=()
+  IFS=',' read -r -a permitted_services <<< "$allowlist"
+  for entry in "${permitted_services[@]}"; do
+    if [[ $entry == "$service" ]]; then allowed=1; break; fi
+  done
+  (( allowed == 1 )) || fail "service is not in SYSCARE_ALLOWED_SERVICES"
+  command -v systemctl >/dev/null 2>&1 || fail "systemctl is unavailable on this host"
+  systemctl restart -- "$service" || fail "systemctl restart failed"
+  local event=service_restarted service_name=$service
+  emit "$event" service_name
+}
+
+main() {
+  (( $# > 0 )) || { usage >&2; exit 2; }
+  local action=$1
+  shift
+  case $action in
+    diagnose)
+      (( $# <= 1 )) || fail "diagnose accepts at most one directory"
+      diagnose "${1:-/}"
+      ;;
+    inspect)
+      (( $# == 1 )) || fail "inspect requires one directory"
+      inspect_directory "$1"
+      ;;
+    backup)
+      (( $# == 1 )) || fail "backup requires one source directory"
+      backup_directory "$1"
+      ;;
+    service-check)
+      (( $# == 1 )) || fail "service-check requires one unit"
+      service_check "$1"
+      ;;
+    service-restart)
+      if (( $# == 1 )); then service_restart "$1" preview
+      elif (( $# == 3 )) && [[ $2 == --apply && $3 == --confirm ]]; then service_restart "$1" apply confirm
+      else fail "service-restart expects UNIT or UNIT --apply --confirm"; fi
+      ;;
+    version)
+      (( $# == 0 )) || fail "version takes no arguments"
+      printf 'syscare 0.1.0\n'
+      ;;
+    help|-h|--help)
+      usage
+      ;;
+    *) fail "unknown command: $action" ;;
+  esac
+}
+
+main "$@"

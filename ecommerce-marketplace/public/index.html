@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en-ZA">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#12251f">
+    <title>Market Square — Local Marketplace</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Market Square home"><span class="brand-mark">M</span> Market Square</a>
+      <div class="topbar-actions">
+        <span id="account-label" class="account-label"></span>
+        <button id="logout-button" class="button button-quiet" type="button" hidden>Sign out</button>
+        <a class="cart-link" href="#cart">Your cart</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div>
+          <p class="eyebrow">A local marketplace demo</p>
+          <h1 id="hero-title">Good finds,<br><span>from local sellers.</span></h1>
+          <p class="hero-copy">Browse a small demo catalog, create a seller store, and try a stock-checked order. No payment is taken.</p>
+          <a class="button button-primary" href="#catalog">Explore the catalog <span aria-hidden="true">↓</span></a>
+        </div>
+        <div class="hero-note" aria-label="Demo payment notice">
+          <span class="note-icon" aria-hidden="true">✓</span>
+          <div><strong>Safe demo checkout</strong><p>Orders are recorded as unpaid examples. No card details or payment provider.</p></div>
+        </div>
+      </section>
+
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+
+      <section id="auth-panel" class="auth-grid" aria-label="Account access">
+        <form id="login-form" class="panel form-panel">
+          <p class="eyebrow">Welcome back</p>
+          <h2>Sign in</h2>
+          <label>Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
+          <label>Password<input name="password" type="password" autocomplete="current-password" minlength="12" maxlength="256" required></label>
+          <button class="button button-dark" type="submit">Sign in</button>
+        </form>
+        <form id="register-form" class="panel form-panel">
+          <p class="eyebrow">Join the market</p>
+          <h2>Create an account</h2>
+          <label>Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
+          <label>Password<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></label>
+          <button class="button button-primary" type="submit">Create customer account</button>
+        </form>
+      </section>
+
+      <section id="account-panel" class="account-grid" hidden>
+        <section class="panel cart-panel" id="cart" aria-labelledby="cart-title">
+          <div class="panel-heading"><div><p class="eyebrow">Your basket</p><h2 id="cart-title">Cart</h2></div><span id="cart-total" class="price">R 0,00</span></div>
+          <ul id="cart-items" class="line-list"></ul>
+          <button id="checkout-button" class="button button-primary full-width" type="button" disabled>Place demo order</button>
+          <p class="fine-print">Checkout rechecks inventory and records an unpaid order. It never processes payment.</p>
+          <h3 class="subheading">Recent orders</h3>
+          <ul id="orders" class="line-list order-list"></ul>
+        </section>
+        <div class="seller-column">
+          <form id="create-store-panel" class="panel form-panel" hidden>
+            <p class="eyebrow">Sell on Market Square</p><h2>Open your store</h2>
+            <label>Store name<input name="name" minlength="2" maxlength="100" required></label>
+            <button class="button button-dark" type="submit">Create seller store</button>
+          </form>
+          <section id="seller-panel" class="panel form-panel" hidden>
+            <p class="eyebrow">Seller tools</p><h2 id="store-name">Your store</h2>
+            <form id="product-form" class="stacked-form">
+              <label>Product name<input name="name" minlength="2" maxlength="120" required></label>
+              <label>Description<textarea name="description" maxlength="2000" rows="3"></textarea></label>
+              <div class="form-row"><label>Price (ZAR)<input name="price" type="number" min="0.01" max="1000000" step="0.01" required></label><label>Stock<input name="inventory" type="number" min="0" max="1000000" step="1" required></label></div>
+              <button class="button button-dark" type="submit">Publish product</button>
+            </form>
+            <h3 class="subheading">Inventory</h3>
+            <ul id="seller-products" class="line-list seller-list"></ul>
+            <h3 class="subheading">Recent store orders</h3>
+            <ul id="seller-orders" class="line-list seller-list"></ul>
+            <p class="fine-print">A customer checkout is only an unpaid demo order. Arrange real fulfillment outside this app.</p>
+          </section>
+        </div>
+      </section>
+
+      <section id="catalog" class="catalog-section" aria-labelledby="catalog-title">
+        <div class="section-heading"><div><p class="eyebrow">Hand-picked for the demo</p><h2 id="catalog-title">Browse the catalog</h2></div><button id="refresh-products" class="button button-quiet" type="button">Refresh products</button></div>
+        <div id="products" class="product-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="how-it-works" aria-label="How the demo works">
+        <div><span class="step-number">01</span><h3>Create an account</h3><p>Use a synthetic email and a unique test password.</p></div>
+        <div><span class="step-number">02</span><h3>List a product</h3><p>Open a seller store and set an integer-cent catalog price.</p></div>
+        <div><span class="step-number">03</span><h3>Try checkout</h3><p>Inventory changes in one transaction. No money moves.</p></div>
+      </section>
+    </main>
+
+    <footer><span>Market Square</span><span>Local demo · No payment processing</span></footer>
+  </body>
+</html>

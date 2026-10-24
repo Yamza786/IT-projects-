@@ -1,0 +1,13 @@
+name: portfolio-example
+version: 1
+jobs:
+  - id: checks
+    image: alpine:3.22
+    timeout_minutes: 2
+    steps:
+      - name: show runner context
+        run: printf 'workspace=%s\n' "$PWD"
+      - name: create report artifact
+        run: mkdir -p dist && printf 'checks completed\n' > dist/report.txt
+    artifacts:
+      - dist/report.txt
