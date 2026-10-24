@@ -25,7 +25,7 @@ checksum=$(jq -r '.checksum_file' <<< "$backup")
 [[ -f $archive && -f $checksum ]]
 (cd -- "$SYSCARE_BACKUP_DIR" && sha256sum -c "${archive##*/}.sha256") >/dev/null
 [[ $(tar -xOzf "$archive" ./subdir/sample.conf) == "synthetic configuration" ]]
-tar -tzvf "$archive" | rg -F 'external-link ->' >/dev/null
+tar -tzvf "$archive" | grep -F 'external-link ->' >/dev/null
 [[ $(stat -c '%a' "$archive") == 600 ]]
 
 if SYSCARE_BACKUP_DIR="$source_dir/nested-backups" bash "$tool" backup "$source_dir" >/dev/null 2>&1; then

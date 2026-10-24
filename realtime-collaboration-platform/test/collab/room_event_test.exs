@@ -9,6 +9,7 @@ defmodule Collab.RoomEventTest do
       body: "hello",
       client_event_id: Ecto.UUID.generate()
     }
+
     assert Collab.RoomEvent.changeset(%Collab.RoomEvent{}, attrs).valid?
     refute Collab.RoomEvent.changeset(%Collab.RoomEvent{}, %{attrs | body: "bad" <> <<0>>}).valid?
 

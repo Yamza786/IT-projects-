@@ -30,6 +30,7 @@ defmodule CollabWeb.RoomChannelTest do
     token = Collab.AuthToken.issue("member-1", "room-a")
     {:ok, authenticated_socket} = UserSocket.connect(%{"token" => token}, %Phoenix.Socket{}, %{})
     socket = socket(UserSocket, "user:member-1", authenticated_socket.assigns)
+
     assert {:error, %{reason: "not_authorized"}} =
              subscribe_and_join(socket, RoomChannel, "room:room-b")
   end
