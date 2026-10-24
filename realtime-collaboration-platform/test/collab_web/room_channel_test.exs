@@ -30,7 +30,8 @@ defmodule CollabWeb.RoomChannelTest do
     token = Collab.AuthToken.issue("member-1", "room-a")
     {:ok, authenticated_socket} = UserSocket.connect(%{"token" => token}, %Phoenix.Socket{}, %{})
     socket = socket(UserSocket, "user:member-1", authenticated_socket.assigns)
-    assert {:error, %{reason: "not_authorized"}} = subscribe_and_join(socket, RoomChannel, "room:room-b")
+    assert {:error, %{reason: "not_authorized"}} =
+             subscribe_and_join(socket, RoomChannel, "room:room-b")
   end
 
   test "rejects blank and oversized messages", %{socket: socket} do
@@ -38,15 +39,18 @@ defmodule CollabWeb.RoomChannelTest do
       ref = push(socket, "message", %{"body" => body, "client_event_id" => Ecto.UUID.generate()})
       assert_reply ref, :error, %{reason: "invalid_body"}
     end
+
     assert Repo.aggregate(RoomEvent, :count) == 0
   end
 
   test "retries with the same event ID do not create duplicate durable events", %{socket: socket} do
     client_id = Ecto.UUID.generate()
+
     for body <- ["first send", "retry with changed content"] do
       ref = push(socket, "message", %{"body" => body, "client_event_id" => client_id})
       assert_reply ref, :ok, %{accepted: true}
     end
+
     assert Repo.aggregate(RoomEvent, :count) == 1
   end
 end

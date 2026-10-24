@@ -1,0 +1,13 @@
+Package: portfolioBI
+Title: Reproducible Transaction Analytics Workbench
+Version: 0.1.0
+Authors@R: person("Portfolio", "Maintainers", email = "maintainers@example.invalid", role = c("aut", "cre"))
+Description: Imports validated synthetic or authorized transaction exports into SQLite and produces reproducible monthly category metrics.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports:
+    DBI,
+    RSQLite
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

@@ -25,6 +25,8 @@ defmodule Collab.RoomEvent do
     |> validate_change(:body, fn :body, body ->
       if String.contains?(body, <<0>>), do: [body: "may not contain NUL"], else: []
     end)
-    |> unique_constraint([:room_id, :user_id, :client_event_id], name: :room_events_client_id_unique)
+    |> unique_constraint([:room_id, :user_id, :client_event_id],
+      name: :room_events_client_id_unique
+    )
   end
 end

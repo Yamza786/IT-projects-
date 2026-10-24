@@ -1,0 +1,17 @@
+services:
+  analytics-demo:
+    build: .
+    environment:
+      BI_DATABASE: /data/analytics.sqlite
+    volumes:
+      - analytics-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    command: ["sh", "-c", "Rscript scripts/bi.R import --csv fixtures/transactions.synthetic.csv && Rscript scripts/bi.R report"]
+volumes:
+  analytics-data:

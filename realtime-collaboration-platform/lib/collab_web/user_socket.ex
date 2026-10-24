@@ -8,7 +8,9 @@ defmodule CollabWeb.UserSocket do
     case Collab.AuthToken.verify(token) do
       {:ok, %{user_id: user_id, room_id: room_id}} ->
         {:ok, assign(socket, :identity, %{user_id: user_id, room_id: room_id})}
-      _ -> :error
+
+      _ ->
+        :error
     end
   end
 

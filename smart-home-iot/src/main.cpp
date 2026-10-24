@@ -101,7 +101,8 @@ int main(int argc, char** argv) {
         }
         const std::string mode = argv[1];
         if (mode == "list" && argc == 2) {
-            for (const auto& [id, device] : load_registry().devices())
+            const auto registry = load_registry();
+            for (const auto& [id, device] : registry.devices())
                 std::cout << id << '\t' << device.kind << '\t' << device.room << '\n';
         } else if (mode == "publish") publish_command(argc, argv);
         else if (mode == "monitor" && argc <= 3) monitor(argc, argv);

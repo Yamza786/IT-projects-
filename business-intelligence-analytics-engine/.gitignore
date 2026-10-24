@@ -1,0 +1,10 @@
+.Rhistory
+.RData
+.Ruserdata
+renv/library/
+renv/staging/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+coverage/

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Locals are passed by name to emit(), which resolves them with indirect expansion.
+# shellcheck disable=SC2034
 set -Eeuo pipefail
 IFS=$'\n\t'
 

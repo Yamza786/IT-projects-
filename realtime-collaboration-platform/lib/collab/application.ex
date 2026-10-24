@@ -14,5 +14,6 @@ defmodule Collab.Application do
   end
 
   @impl true
-  def config_change(changed, _new, removed), do: CollabWeb.Endpoint.config_change(changed, removed)
+  def config_change(changed, _new, removed),
+    do: CollabWeb.Endpoint.config_change(changed, removed)
 end

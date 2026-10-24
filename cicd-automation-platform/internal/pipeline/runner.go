@@ -143,7 +143,7 @@ func executeJob(job Job, workspace string) (string, error) {
 		"run", "--rm", "--network=none", "--read-only", "--cap-drop=ALL",
 		"--security-opt=no-new-privileges", "--pids-limit=64", "--memory=512m", "--cpus=1",
 		"--tmpfs", "/tmp:rw,noexec,nosuid,size=64m", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
-		"--workdir", "/workspace", "--entrypoint=/bin/sh", "--mount", "type=bind,src=" + workspace + ",dst=/workspace,rw",
+		"--workdir", "/workspace", "--entrypoint=/bin/sh", "--mount", "type=bind,src=" + workspace + ",dst=/workspace",
 		job.Image, "-eu", "-c", stepScript(job.Steps),
 	}
 	command := exec.CommandContext(jobContext, "docker", arguments...)

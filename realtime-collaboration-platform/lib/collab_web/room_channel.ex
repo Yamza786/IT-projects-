@@ -22,6 +22,7 @@ defmodule CollabWeb.RoomChannel do
     user_id = socket.assigns.identity.user_id
     {:ok, _} = Presence.track(self(), topic, user_id, %{online_at: System.system_time(:second)})
     push(socket, "presence_state", Presence.list(topic))
+
     recent =
       from(event in RoomEvent,
         where: event.room_id == ^socket.assigns.room_id,
@@ -52,6 +53,7 @@ defmodule CollabWeb.RoomChannel do
     clean = String.trim(body)
     if clean != "" and byte_size(clean) <= 4_000, do: {:ok, clean}, else: {:error, "invalid_body"}
   end
+
   defp validate_body(_), do: {:error, "invalid_body"}
 
   defp validate_event_id(%{"client_event_id" => id}) when is_binary(id) do
@@ -60,24 +62,49 @@ defmodule CollabWeb.RoomChannel do
       :error -> {:error, "invalid_client_event_id"}
     end
   end
+
   defp validate_event_id(_), do: {:error, "invalid_client_event_id"}
 
   defp persist_message(socket, body, client_event_id) do
     identity = socket.assigns.identity
-    attrs = %{room_id: socket.assigns.room_id, user_id: identity.user_id, kind: "message", body: body, client_event_id: client_event_id}
+
+    attrs = %{
+      room_id: socket.assigns.room_id,
+      user_id: identity.user_id,
+      kind: "message",
+      body: body,
+      client_event_id: client_event_id
+    }
+
     case Repo.insert(RoomEvent.changeset(%RoomEvent{}, attrs)) do
-      {:ok, event} -> {:ok, event}
+      {:ok, event} ->
+        {:ok, event}
+
       {:error, %Ecto.Changeset{errors: errors}} ->
-        if Keyword.has_key?(errors, :client_event_id), do: find_duplicate(attrs), else: {:error, "invalid_message"}
+        if Keyword.has_key?(errors, :client_event_id),
+          do: find_duplicate(attrs),
+          else: {:error, "invalid_message"}
     end
   end
 
   defp find_duplicate(attrs) do
-    case Repo.get_by(RoomEvent, room_id: attrs.room_id, user_id: attrs.user_id, client_event_id: attrs.client_event_id) do
+    case Repo.get_by(RoomEvent,
+           room_id: attrs.room_id,
+           user_id: attrs.user_id,
+           client_event_id: attrs.client_event_id
+         ) do
       nil -> {:error, "message_not_saved"}
       event -> {:ok, event}
     end
   end
 
-  defp serialize(event), do: %{id: event.id, room_id: event.room_id, user_id: event.user_id, kind: event.kind, body: event.body, inserted_at: event.inserted_at}
+  defp serialize(event),
+    do: %{
+      id: event.id,
+      room_id: event.room_id,
+      user_id: event.user_id,
+      kind: event.kind,
+      body: event.body,
+      inserted_at: event.inserted_at
+    }
 end
