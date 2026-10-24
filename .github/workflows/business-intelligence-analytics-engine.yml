@@ -15,7 +15,12 @@ jobs:
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: '4.4.2'
-      - run: Rscript -e 'install.packages(c("DBI", "RSQLite", "testthat"), repos="https://cloud.r-project.org")'
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::DBI
+            any::RSQLite
+            any::testthat
       - run: Rscript tests/testthat.R
       - run: Rscript scripts/bi.R init --db build/ci.sqlite
       - run: Rscript scripts/bi.R import --db build/ci.sqlite --csv fixtures/transactions.synthetic.csv
