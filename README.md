@@ -2,7 +2,7 @@
 
 A portfolio repository cataloging 60 projects: 25 practical applications, a 30-project multi-language engineering program, and five additional learning repositories. The portfolio demonstrates local-first product design, full-stack workflows, data analysis, defensive security, accessibility, integration, and deployment practice.
 
-**Browse:** [interactive project catalog](portfolio-command-center/README.md) · [30-project index](portfolio/INDEX.md) · [skills matrix](portfolio/SKILLS_MATRIX.md) · [roadmap](PORTFOLIO_ROADMAP.md)
+**Browse:** [all 60 projects and interactive catalog](portfolio-command-center/README.md) · [30-project index](portfolio/INDEX.md) · [skills matrix](portfolio/SKILLS_MATRIX.md) · [roadmap](PORTFOLIO_ROADMAP.md)
 
 ## The 15-project portfolio
 
