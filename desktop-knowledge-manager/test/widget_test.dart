@@ -12,11 +12,13 @@ void main() {
     await store.save(title: 'Release plan', body: 'Prepare the build checklist');
     await store.save(title: 'Garden', body: 'Water plants');
     await tester.pumpWidget(KnowledgeManagerApp(store: store));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
     expect(find.text('Release plan'), findsOneWidget);
     expect(find.text('Garden'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, 'build');
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
     expect(find.text('Release plan'), findsOneWidget);
     expect(find.text('Garden'), findsNothing);
     await store.close();

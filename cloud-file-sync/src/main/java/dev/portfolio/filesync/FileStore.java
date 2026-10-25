@@ -61,7 +61,7 @@ public final class FileStore {
     public record Upload(String id, int chunkCount, List<Integer> missingChunks) { }
     public record ObjectInfo(String name, long size, String sha256, int version, String updatedAt) { }
 
-    public Upload beginUpload(String owner, String name, long size, int chunks, String sha256, Integer baseVersion) throws SQLException {
+    public Upload beginUpload(String owner, String name, long size, int chunks, String sha256, Integer baseVersion) throws SQLException, IOException {
         if (owner == null || !owner.matches("[A-Za-z0-9._-]{1,64}")) throw new IllegalArgumentException("invalid owner identifier");
         if (name == null || !name.matches("[A-Za-z0-9._-]{1,128}") || name.equals(".") || name.equals("..")) throw new IllegalArgumentException("filename must use safe ASCII letters, digits, dot, underscore, or dash");
         if (size < 1 || size > MAX_FILE_BYTES) throw new IllegalArgumentException("file size must be 1 byte to 512 MiB");
