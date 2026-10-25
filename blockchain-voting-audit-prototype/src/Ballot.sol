@@ -3,7 +3,12 @@ pragma solidity 0.8.24;
 
 /// @notice Educational, transparent ballot. It does not provide ballot secrecy or sybil resistance.
 contract Ballot {
-    enum Phase { Setup, Open, Ended, Closed }
+    enum Phase {
+        Setup,
+        Open,
+        Ended,
+        Closed
+    }
 
     error NotOwner();
     error InvalidWindow();
