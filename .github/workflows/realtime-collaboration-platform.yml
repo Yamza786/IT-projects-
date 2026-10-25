@@ -1,5 +1,6 @@
 name: Real-Time Collaboration Platform
 on:
+  workflow_dispatch:
   push:
     paths: ['realtime-collaboration-platform/**', '.github/workflows/realtime-collaboration-platform.yml']
   pull_request:

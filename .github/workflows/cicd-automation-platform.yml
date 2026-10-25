@@ -1,6 +1,7 @@
 name: Pipeline Forge checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "cicd-automation-platform/**"

@@ -1,6 +1,7 @@
 name: Smart home IoT checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "smart-home-iot/**"

@@ -1,6 +1,7 @@
 name: E-commerce marketplace checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "ecommerce-marketplace/**"

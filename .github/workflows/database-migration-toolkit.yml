@@ -1,6 +1,7 @@
 name: Database migration toolkit
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "database-migration-toolkit/**"

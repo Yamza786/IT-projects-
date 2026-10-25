@@ -1,6 +1,7 @@
 name: Enterprise SaaS Management
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "enterprise-saas-management/**"

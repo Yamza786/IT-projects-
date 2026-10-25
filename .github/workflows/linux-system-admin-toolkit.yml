@@ -1,6 +1,7 @@
 name: Linux system administration toolkit checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "linux-system-admin-toolkit/**"

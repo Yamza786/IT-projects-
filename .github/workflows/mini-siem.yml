@@ -1,6 +1,7 @@
 name: Mini SIEM checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "mini-siem-platform/**"

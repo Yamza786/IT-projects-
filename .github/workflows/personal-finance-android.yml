@@ -1,6 +1,7 @@
 name: Pocket Ledger Android checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "personal-finance-android/**"
