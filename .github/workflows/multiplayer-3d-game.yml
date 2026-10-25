@@ -1,14 +1,32 @@
 name: Unity multiplayer verification
 
 on:
+  push:
+    paths:
+      - "multiplayer-3d-game/**"
+      - ".github/workflows/multiplayer-3d-game.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  editmode:
+  rules-smoke:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Test game rules without Unity licensing
+        run: dotnet run --project multiplayer-3d-game/verification/RulesHarness/RulesHarness.csproj --configuration Release
+
+  unity-editor:
+    needs: [rules-smoke, license-check]
+    if: ${{ needs.license-check.outputs.configured == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,9 +46,30 @@ jobs:
           name: unity-editmode-results
           path: artifacts/editmode
 
-  linux-player:
-    needs: editmode
+  license-check:
     runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check for configured Unity license
+        id: check
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        run: |
+          if [ -n "$UNITY_LICENSE" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Unity license is configured; Editor and player checks will run." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Unity EditMode and player checks skipped: configure the repository Actions secret UNITY_LICENSE." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  linux-player:
+    needs: [rules-smoke, license-check, unity-editor]
+    if: ${{ needs.license-check.outputs.configured == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
     steps:
       - uses: actions/checkout@v4
         with:
