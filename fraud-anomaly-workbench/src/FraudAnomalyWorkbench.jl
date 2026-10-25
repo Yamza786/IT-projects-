@@ -139,7 +139,8 @@ function parse_csv(path::AbstractString)
     length(lines) <= 10_001 || throw(ArgumentError("CSV exceeds 10,000 rows"))
     result = Transaction[]
     seen = Set{String}()
-    for (line_number, line) in enumerate(lines[2:end], 2)
+    for (offset, line) in enumerate(lines[2:end])
+        line_number = offset + 1
         fields = split(chomp(line), ',')
         length(fields) == 6 || throw(ArgumentError("row $line_number must contain exactly six unquoted fields"))
         id, amount, category, hour, new_device, country_change = fields

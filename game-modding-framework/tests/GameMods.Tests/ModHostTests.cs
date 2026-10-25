@@ -26,7 +26,8 @@ public class ModHostTests
     {
         var host = new ModHost();
         Assert.ThrowsAny<Exception>(() => host.Load(new("x", 1, "main.lua"), "io.open('/etc/passwd')"));
-        Assert.ThrowsAny<Exception>(() => host.Load(new("x", 1, "main.lua"), "while true do end"));
+        Assert.Throws<ArgumentException>(() => host.Load(new("x", 1, "main.lua"), "while true do end"));
+        Assert.Throws<ArgumentException>(() => host.Load(new("x", 1, "main.lua"), "function loop() end"));
         Assert.Throws<ArgumentException>(() => host.Load(new("x", 1, "main.lua"), new string('a', ModHost.MaxScriptBytes + 1)));
     }
 }

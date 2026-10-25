@@ -25,8 +25,10 @@ public sealed class ModHost
             throw new ArgumentException("Script exceeds 64 KiB.", nameof(source));
 
         _events.Clear();
-        var script = new Script(CoreModules.Preset_SoftSandbox);
-        script.Options.InstructionCounter = 100_000;
+        // This deliberately small Lua subset excludes libraries and unbounded constructs.
+        if (System.Text.RegularExpressions.Regex.IsMatch(source, @"\b(while|for|repeat|function)\b"))
+            throw new ArgumentException("Loops and function declarations are outside the bounded mod subset.", nameof(source));
+        var script = new Script(CoreModules.Basic);
         script.Globals["emit"] = (Action<string, string>)((name, payload) =>
         {
             if (name.Length is < 1 or > 64 || payload.Length > 512)
