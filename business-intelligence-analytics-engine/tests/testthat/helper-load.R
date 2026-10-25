@@ -1,1 +1,1 @@
-source(file.path("R", "analytics.R"))
+source(testthat::test_path("..", "..", "R", "analytics.R"))

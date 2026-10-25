@@ -23,7 +23,13 @@ connect_warehouse <- function(path = database_path()) {
 }
 
 apply_migrations <- function(connection) {
-  migration_dir <- file.path("sql", "migrations")
+  root <- normalizePath(getwd(), mustWork = TRUE)
+  while (!dir.exists(file.path(root, "sql", "migrations"))) {
+    parent <- dirname(root)
+    if (identical(parent, root)) stop("cannot locate SQL migrations from the working directory", call. = FALSE)
+    root <- parent
+  }
+  migration_dir <- file.path(root, "sql", "migrations")
   files <- sort(list.files(migration_dir, pattern = "^[0-9]+_.*\\.sql$", full.names = TRUE))
   if (length(files) == 0L) stop("no SQL migrations found", call. = FALSE)
   DBI::dbExecute(connection, "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
