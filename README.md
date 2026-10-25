@@ -47,6 +47,8 @@ The staged implementation plan, build order, requirements, dependencies, milesto
 
 Project 23, the [Desktop Knowledge Manager](desktop-knowledge-manager/README.md), is now in implementation with local SQLite notes, search, an encrypted backup flow, and Flutter desktop CI.
 
+Project 24, the [Enterprise HR and Payroll Prototype](enterprise-hr-payroll/README.md), adds role-separated employee management, fixed-cents calculations, audit events, and CSV reports.
+
 ## Verify the portfolio workflows
 
 Use Python 3.12 or newer and install dependencies with `python -m pip install -r requirements-termux.txt`. Run the same suite as CI:
