@@ -1,5 +1,6 @@
 import 'package:desktop_knowledge_manager/app.dart';
 import 'package:desktop_knowledge_manager/data/note_store.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
