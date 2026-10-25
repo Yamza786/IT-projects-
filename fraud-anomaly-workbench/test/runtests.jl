@@ -35,6 +35,11 @@ end
         @test list_scores(db)[1].review_state == "accepted"
         @test_throws ArgumentError review_score!(db, "missing", "rejected")
         @test_throws ArgumentError review_score!(db, "flag-1", "pending")
+        mktemp() do path, io
+            close(io)
+            @test export_csv(db, path) == 1
+            @test occursin("flag-1,9999,retail", read(path, String))
+        end
     finally
         close(db)
     end

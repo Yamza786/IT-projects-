@@ -55,6 +55,8 @@ Project 26, [Cloud File Storage and Synchronization](cloud-file-sync/README.md),
 
 Project 27, [Fraud and Anomaly Detection Workbench](fraud-anomaly-workbench/README.md), demonstrates explainable baselines and human review using synthetic data.
 
+Project 28, [Windows Configuration and Compliance Scanner](windows-compliance-scanner/README.md), adds read-only Windows policy checks and actionable reports.
+
 ## Verify the portfolio workflows
 
 Use Python 3.12 or newer and install dependencies with `python -m pip install -r requirements-termux.txt`. Run the same suite as CI:
