@@ -38,7 +38,7 @@ end
         mktemp() do path, io
             close(io)
             @test export_csv(db, path) == 1
-            @test occursin("flag-1,9999,retail", read(path, String))
+        @test occursin("\"flag-1\",\"9999\",\"retail\"", read(path, String))
         end
     finally
         close(db)

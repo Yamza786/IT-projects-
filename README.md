@@ -57,6 +57,10 @@ Project 27, [Fraud and Anomaly Detection Workbench](fraud-anomaly-workbench/READ
 
 Project 28, [Windows Configuration and Compliance Scanner](windows-compliance-scanner/README.md), adds read-only Windows policy checks and actionable reports.
 
+Project 29, [Game Modding and Scripting Framework](game-modding-framework/README.md), hosts versioned Lua mods in a bounded C# sandbox.
+
+Project 30, [Distributed Job Queue and Workflow Engine](distributed-workflow-queue/README.md), adds durable SQLite jobs, atomic worker leases, retries and dependencies in Scala.
+
 ## Verify the portfolio workflows
 
 Use Python 3.12 or newer and install dependencies with `python -m pip install -r requirements-termux.txt`. Run the same suite as CI:
