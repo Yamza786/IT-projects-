@@ -2,6 +2,7 @@ module FraudAnomalyWorkbench
 
 using DBInterface
 using SQLite
+using Tables
 
 export Transaction, Baseline, Score, train_baseline, score_transaction, save_scores!, list_scores, review_score!, export_csv, parse_csv
 
@@ -101,13 +102,13 @@ end
 function list_scores(db::SQLite.DB; flagged_only::Bool=false)
     initialize(db)
     sql = flagged_only ? "SELECT transaction_id,amount_cents,category,hour_utc,z_score,flagged,reasons,review_state FROM review_scores WHERE flagged=1 ORDER BY scored_at,transaction_id" : "SELECT transaction_id,amount_cents,category,hour_utc,z_score,flagged,reasons,review_state FROM review_scores ORDER BY scored_at,transaction_id"
-    collect(DBInterface.execute(db, sql))
+    collect(Tables.namedtupleiterator(DBInterface.execute(db, sql)))
 end
 
 function review_score!(db::SQLite.DB, transaction_id::AbstractString, state::AbstractString)
     state in ("accepted", "rejected") || throw(ArgumentError("review state must be accepted or rejected"))
     DBInterface.execute(db, "UPDATE review_scores SET review_state=? WHERE transaction_id=? AND flagged=1", (state, transaction_id))
-    first(collect(DBInterface.execute(db, "SELECT changes() AS changed"))).changed == 1 || throw(ArgumentError("flagged transaction does not exist"))
+    first(DBInterface.execute(db, "SELECT changes()"))[1] == 1 || throw(ArgumentError("flagged transaction does not exist"))
     state
 end
 
