@@ -53,6 +53,8 @@ Project 25, [Portfolio Testkit](automated-testing-framework/README.md), provides
 
 Project 26, [Cloud File Storage and Synchronization](cloud-file-sync/README.md), implements authenticated resumable chunks, integrity checks, and optimistic file versions.
 
+Project 27, [Fraud and Anomaly Detection Workbench](fraud-anomaly-workbench/README.md), demonstrates explainable baselines and human review using synthetic data.
+
 ## Verify the portfolio workflows
 
 Use Python 3.12 or newer and install dependencies with `python -m pip install -r requirements-termux.txt`. Run the same suite as CI:

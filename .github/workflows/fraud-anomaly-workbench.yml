@@ -1,0 +1,28 @@
+name: Fraud and anomaly workbench
+
+on:
+  push:
+    paths:
+      - "fraud-anomaly-workbench/**"
+      - ".github/workflows/fraud-anomaly-workbench.yml"
+  pull_request:
+    paths:
+      - "fraud-anomaly-workbench/**"
+      - ".github/workflows/fraud-anomaly-workbench.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fraud-anomaly-workbench
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - run: julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
+      - run: julia --project=. src/cli.jl /tmp/fraud-workbench.sqlite
