@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Workbench IDE</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">LOCAL JAVASCRIPT PLAYGROUND</p>
+      <h1>Workbench IDE</h1>
+      <p>Run a short JavaScript snippet in a disposable, network-disabled container.</p>
+    </header>
+    <form id="run-form">
+      <label for="source">Source <span>8 KiB maximum</span></label>
+      <textarea id="source" name="source" spellcheck="false" maxlength="8192" required>const total = [3, 5, 8].reduce((sum, value) => sum + value, 0);
+console.log(`Total: ${total}`);</textarea>
+      <div class="actions">
+        <p>Runs are limited to 2 seconds, 128 MiB memory, 32 processes, and 16 KiB per output stream.</p>
+        <button id="run" type="submit">Run code</button>
+      </div>
+    </form>
+    <section aria-labelledby="result-heading">
+      <h2 id="result-heading">Output</h2>
+      <pre id="output" role="status" aria-live="polite">Your result will appear here.</pre>
+    </section>
+    <footer>Runs are ephemeral and are not saved. Keep this service on localhost.</footer>
+  </main>
+</body>
+</html>

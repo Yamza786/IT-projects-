@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "none",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "outFile": "web/app.js",
+    "noEmitOnError": true
+  },
+  "files": ["client/app.ts"]
+}

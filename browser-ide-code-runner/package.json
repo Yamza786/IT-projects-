@@ -1,0 +1,11 @@
+{
+  "name": "browser-ide-code-runner-client",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
