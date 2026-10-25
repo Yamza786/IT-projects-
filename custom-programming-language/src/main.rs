@@ -23,7 +23,7 @@ fn main() {
             std::process::exit(1);
         }
     }
-    let mut file = match File::open(path) {
+    let file = match File::open(path) {
         Ok(file) => file,
         Err(error) => {
             eprintln!("tinylang: cannot read UTF-8 source: {error}");
@@ -31,7 +31,7 @@ fn main() {
         }
     };
     match file.metadata() {
-        Ok(metadata) if metadata.is_file() && metadata.len() <= 1_048_576 => metadata,
+        Ok(metadata) if metadata.is_file() && metadata.len() <= 1_048_576 => {}
         _ => {
             eprintln!("tinylang: source must be a regular file no larger than 1 MiB");
             std::process::exit(1);
