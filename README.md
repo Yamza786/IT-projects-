@@ -51,6 +51,8 @@ Project 24, the [Enterprise HR and Payroll Prototype](enterprise-hr-payroll/READ
 
 Project 25, [Portfolio Testkit](automated-testing-framework/README.md), provides reusable Node.js test cases, fixtures, assertions, and machine-readable reports.
 
+Project 26, [Cloud File Storage and Synchronization](cloud-file-sync/README.md), implements authenticated resumable chunks, integrity checks, and optimistic file versions.
+
 ## Verify the portfolio workflows
 
 Use Python 3.12 or newer and install dependencies with `python -m pip install -r requirements-termux.txt`. Run the same suite as CI:
