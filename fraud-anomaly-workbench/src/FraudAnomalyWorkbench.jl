@@ -12,16 +12,15 @@ struct Transaction
     hour_utc::Int
     new_device::Bool
     country_change::Bool
-end
-
-function Transaction(id::AbstractString, amount_cents::Integer, category::AbstractString, hour_utc::Integer, new_device::Bool, country_change::Bool)
-    1 <= ncodeunits(id) <= 64 || throw(ArgumentError("transaction id must contain 1–64 bytes"))
-    occursin(r"^[A-Za-z0-9._-]+$", id) || throw(ArgumentError("transaction id contains unsupported characters"))
-    1 <= amount_cents <= 100_000_000_000 || throw(ArgumentError("amount must be positive and within the limit"))
-    1 <= ncodeunits(category) <= 64 || throw(ArgumentError("category must contain 1–64 bytes"))
-    occursin(r"^[A-Za-z0-9._-]+$", category) || throw(ArgumentError("category contains unsupported characters"))
-    0 <= hour_utc <= 23 || throw(ArgumentError("hour_utc must be 0–23"))
-    Transaction(String(id), Int64(amount_cents), String(category), Int(hour_utc), new_device, country_change)
+    function Transaction(id::AbstractString, amount_cents::Integer, category::AbstractString, hour_utc::Integer, new_device::Bool, country_change::Bool)
+        1 <= ncodeunits(id) <= 64 || throw(ArgumentError("transaction id must contain 1–64 bytes"))
+        occursin(r"^[A-Za-z0-9._-]+$", id) || throw(ArgumentError("transaction id contains unsupported characters"))
+        1 <= amount_cents <= 100_000_000_000 || throw(ArgumentError("amount must be positive and within the limit"))
+        1 <= ncodeunits(category) <= 64 || throw(ArgumentError("category must contain 1–64 bytes"))
+        occursin(r"^[A-Za-z0-9._-]+$", category) || throw(ArgumentError("category contains unsupported characters"))
+        0 <= hour_utc <= 23 || throw(ArgumentError("hour_utc must be 0–23"))
+        new(String(id), Int64(amount_cents), String(category), Int(hour_utc), new_device, country_change)
+    end
 end
 
 struct Baseline
