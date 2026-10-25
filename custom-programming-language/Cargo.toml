@@ -1,0 +1,12 @@
+[package]
+name = "tinylang"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "A small statically typed integer language and interpreter"
+
+[[bin]]
+name = "tinylang"
+path = "src/main.rs"
+
+[dependencies]

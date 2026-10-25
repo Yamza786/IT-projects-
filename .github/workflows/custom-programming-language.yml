@@ -1,0 +1,29 @@
+name: Custom programming language
+
+on:
+  push:
+    paths:
+      - "custom-programming-language/**"
+      - ".github/workflows/custom-programming-language.yml"
+  pull_request:
+    paths:
+      - "custom-programming-language/**"
+      - ".github/workflows/custom-programming-language.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: custom-programming-language
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo test --locked
+      - run: cargo clippy --all-targets --locked -- -D warnings

@@ -2,11 +2,14 @@
 
 #include <opencv2/imgcodecs.hpp>
 
-#include <cassert>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
+
+void require(bool condition, const std::string& message) {
+    if (!condition) throw std::runtime_error(message);
+}
 
 int main() {
     namespace fs = std::filesystem;
@@ -16,11 +19,11 @@ int main() {
     const fs::path valid = root / "fixture.png";
     cv::Mat pixels(2, 3, CV_8UC3, cv::Scalar(255, 255, 255));
     pixels.at<cv::Vec3b>(0, 0) = cv::Vec3b(0, 0, 0);
-    assert(cv::imwrite(valid.string(), pixels));
+    require(cv::imwrite(valid.string(), pixels), "could not create synthetic fixture");
     auto summary = image_inspector::inspect(valid);
-    assert(summary.width == 3 && summary.height == 2 && summary.channels == 3);
-    assert(summary.bright_pixels == 5);
-    assert(summary.mean_luminance > 200.0);
+    require(summary.width == 3 && summary.height == 2 && summary.channels == 3, "unexpected image dimensions");
+    require(summary.bright_pixels == 5, "unexpected bright pixel count");
+    require(summary.mean_luminance > 200.0, "unexpected mean luminance");
 
     const fs::path oversized = root / "oversized.png";
     {
@@ -31,13 +34,13 @@ int main() {
     bool rejected_oversized = false;
     try { (void) image_inspector::inspect(oversized); }
     catch (const std::runtime_error& error) { rejected_oversized = std::string(error.what()).find("dimensions") != std::string::npos; }
-    assert(rejected_oversized);
+    require(rejected_oversized, "oversized image dimensions were not rejected");
 
     const fs::path link = root / "linked.png";
     fs::create_symlink(valid, link);
     bool rejected_link = false;
     try { (void) image_inspector::inspect(link); }
     catch (const std::runtime_error&) { rejected_link = true; }
-    assert(rejected_link);
+    require(rejected_link, "symlink input was not rejected");
     fs::remove_all(root);
 }
