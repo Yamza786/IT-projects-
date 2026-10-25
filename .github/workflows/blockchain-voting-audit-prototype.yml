@@ -1,0 +1,32 @@
+name: Blockchain Voting Prototype checks
+
+on:
+  push:
+    paths:
+      - "blockchain-voting-audit-prototype/**"
+      - ".github/workflows/blockchain-voting-audit-prototype.yml"
+  pull_request:
+    paths:
+      - "blockchain-voting-audit-prototype/**"
+      - ".github/workflows/blockchain-voting-audit-prototype.yml"
+
+jobs:
+  solidity-and-client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: blockchain-voting-audit-prototype
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: blockchain-voting-audit-prototype/package-lock.json
+      - run: forge fmt --check
+      - run: forge test -vvv
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run build
+      - run: npm test
