@@ -1,6 +1,7 @@
 name: Custom programming language
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "custom-programming-language/**"

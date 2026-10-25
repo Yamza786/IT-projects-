@@ -1,6 +1,7 @@
 name: Desktop knowledge manager
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "desktop-knowledge-manager/**"

@@ -1,6 +1,7 @@
 name: Enterprise HR and payroll
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "enterprise-hr-payroll/**"

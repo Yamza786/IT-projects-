@@ -1,6 +1,7 @@
 name: Digital Forensics Toolkit checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "digital-forensics-toolkit/**"

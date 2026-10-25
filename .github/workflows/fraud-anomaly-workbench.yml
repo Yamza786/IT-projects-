@@ -1,6 +1,7 @@
 name: Fraud and anomaly workbench
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "fraud-anomaly-workbench/**"

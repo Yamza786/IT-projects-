@@ -1,5 +1,6 @@
 name: Distributed workflow queue
 on:
+  workflow_dispatch:
   push:
     paths: ['distributed-workflow-queue/**', '.github/workflows/distributed-workflow-queue.yml']
   pull_request:

@@ -1,6 +1,7 @@
 name: Browser IDE Code Runner checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "browser-ide-code-runner/**"

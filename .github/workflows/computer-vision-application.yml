@@ -1,6 +1,7 @@
 name: Computer vision application
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "computer-vision-application/**"

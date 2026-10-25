@@ -1,6 +1,7 @@
 name: Windows compliance scanner
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "windows-compliance-scanner/**"

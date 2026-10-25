@@ -1,6 +1,7 @@
 name: Blockchain Voting Prototype checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "blockchain-voting-audit-prototype/**"

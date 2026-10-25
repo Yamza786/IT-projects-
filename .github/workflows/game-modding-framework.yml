@@ -1,5 +1,6 @@
 name: Game modding framework
 on:
+  workflow_dispatch:
   push:
     paths: ['game-modding-framework/**', '.github/workflows/game-modding-framework.yml']
   pull_request:

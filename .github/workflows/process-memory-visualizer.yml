@@ -1,6 +1,7 @@
 name: Process and memory visualizer
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "process-memory-visualizer/**"

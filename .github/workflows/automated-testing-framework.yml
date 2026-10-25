@@ -1,6 +1,7 @@
 name: Automated testing framework
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "automated-testing-framework/**"

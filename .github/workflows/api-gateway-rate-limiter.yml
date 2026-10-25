@@ -1,6 +1,7 @@
 name: API gateway and rate limiter
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "api-gateway-rate-limiter/**"

@@ -1,6 +1,7 @@
 name: Cloud file storage and sync
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "cloud-file-sync/**"
