@@ -1,0 +1,27 @@
+name: Digital Forensics Toolkit checks
+
+on:
+  push:
+    paths:
+      - "digital-forensics-toolkit/**"
+      - ".github/workflows/digital-forensics-toolkit.yml"
+  pull_request:
+    paths:
+      - "digital-forensics-toolkit/**"
+      - ".github/workflows/digital-forensics-toolkit.yml"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: digital-forensics-toolkit
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake libssl-dev shellcheck
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure
+      - run: bash -n scripts/collect-evidence.sh tests/smoke.sh
+      - run: shellcheck scripts/collect-evidence.sh tests/smoke.sh
+      - run: bash tests/smoke.sh build/forensic-tool
