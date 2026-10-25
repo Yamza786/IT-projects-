@@ -2,7 +2,6 @@ package dev.portfolio.filesync;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -40,7 +39,12 @@ public final class FileStore {
             statement.execute("PRAGMA busy_timeout = 5000");
             statement.execute("CREATE TABLE IF NOT EXISTS uploads (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL, chunk_count INTEGER NOT NULL, sha256 TEXT NOT NULL, base_version INTEGER, state TEXT NOT NULL CHECK(state IN ('open','complete','canceled')), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
             statement.execute("CREATE TABLE IF NOT EXISTS upload_chunks (upload_id TEXT NOT NULL REFERENCES uploads(id), chunk_index INTEGER NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(upload_id,chunk_index))");
-            statement.execute("CREATE TABLE IF NOT EXISTS objects (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, version INTEGER NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner,name))");
+            statement.execute("CREATE TABLE IF NOT EXISTS objects (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, version INTEGER NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, blob_path TEXT NOT NULL, UNIQUE(owner,name))");
+            boolean hasBlobPath = false;
+            try (var columns = statement.executeQuery("PRAGMA table_info(objects)")) {
+                while (columns.next()) if (columns.getString("name").equals("blob_path")) hasBlobPath = true;
+            }
+            if (!hasBlobPath) statement.execute("ALTER TABLE objects ADD COLUMN blob_path TEXT NOT NULL DEFAULT ''");
         }
         try { Files.setPosixFilePermissions(database.toAbsolutePath().normalize(), java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")); }
         catch (IOException | UnsupportedOperationException exception) { throw new IOException("cannot secure metadata database permissions", exception); }

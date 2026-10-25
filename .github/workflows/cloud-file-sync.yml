@@ -29,3 +29,9 @@ jobs:
         with:
           gradle-version: "8.14.3"
       - run: gradle test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cloud-file-sync-test-results
+          path: cloud-file-sync/build/test-results/test/
+          if-no-files-found: warn
