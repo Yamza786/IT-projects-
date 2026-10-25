@@ -1,0 +1,21 @@
+name: desktop_knowledge_manager
+description: Offline-first, searchable desktop notes with encrypted backup.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cryptography: ^2.7.0
+  sqflite_common_ffi: ^2.3.6
+  sqlite3_flutter_libs: ^0.5.24
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
