@@ -36,3 +36,15 @@ jobs:
       - run: go vet ./...
       - run: go build -o /tmp/siem ./cmd/siem
       - run: docker build -t mini-siem:ci .
+      - name: Smoke test the container API
+        run: |
+          token="$(openssl rand -hex 32)"
+          docker run -d --name mini-siem-smoke -p 127.0.0.1:18090:8090 -e SIEM_API_TOKEN="$token" -v mini-siem-smoke-data:/var/lib/siem mini-siem:ci
+          trap 'docker rm -f mini-siem-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18090/api/v1/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18090/api/v1/health >/dev/null
+          ! curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18090/api/v1/events | grep -q '^200$'
+          curl --fail --silent -H "Authorization: Bearer $token" http://127.0.0.1:18090/api/v1/events >/dev/null

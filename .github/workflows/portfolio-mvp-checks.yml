@@ -1,6 +1,7 @@
 name: Portfolio MVP checks
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "personal-finance-android/**"

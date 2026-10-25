@@ -1,6 +1,7 @@
 use crate::crypto::{decrypt, encrypt, random_bytes, wipe, SecretKey};
 use crate::sqlite::Connection;
 use std::fs::{self, OpenOptions};
+use std::io::{Read, Write};
 use std::path::Path;
 
 const SCHEMA: &str = include_str!("../migrations/001_initial.sql");
@@ -10,6 +11,17 @@ const NONCE_BYTES: usize = 12;
 const MAX_SERVICE_BYTES: usize = 120;
 const MAX_USERNAME_BYTES: usize = 512;
 const MAX_PASSWORD_BYTES: usize = 4096;
+const BACKUP_MAGIC: &[u8] = b"VSBK\x01";
+const BACKUP_AAD: &[u8] = b"vaultsmith:backup:v1";
+const MAX_BACKUP_BYTES: usize = 4 * 1024 * 1024;
+
+struct SecretBuffer(Vec<u8>);
+
+impl Drop for SecretBuffer {
+    fn drop(&mut self) {
+        wipe(&mut self.0);
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntrySummary {
@@ -23,6 +35,14 @@ pub struct EntrySecret {
     pub service: String,
     pub username: String,
     pub password: String,
+}
+
+impl Drop for EntrySecret {
+    fn drop(&mut self) {
+        wipe(unsafe { self.service.as_bytes_mut() });
+        wipe(unsafe { self.username.as_bytes_mut() });
+        wipe(unsafe { self.password.as_bytes_mut() });
+    }
 }
 
 pub fn open_database(path: &str) -> Result<Connection, String> {
@@ -268,6 +288,218 @@ pub fn remove_entry(connection: &Connection, id: &str) -> Result<bool, String> {
     Ok(connection.changes() == 1)
 }
 
+/// Write a portable AES-GCM encrypted backup using a separately derived backup passphrase.
+/// The target is created exclusively with private permissions and is never overwritten.
+pub fn export_backup(
+    connection: &Connection,
+    vault_key: &SecretKey,
+    backup_passphrase: &str,
+    path: &str,
+) -> Result<usize, String> {
+    if backup_passphrase.len() < 12 || backup_passphrase.len() > 1024 {
+        return Err("backup passphrase must contain 12..=1024 bytes".into());
+    }
+    let entries = list_entries(connection)?;
+    if entries.len() > 10_000 {
+        return Err("backup exceeds 10,000 entries".into());
+    }
+    let mut plaintext = SecretBuffer(Vec::new());
+    plaintext
+        .0
+        .extend_from_slice(&(entries.len() as u32).to_be_bytes());
+    for summary in &entries {
+        let entry = read_entry(connection, vault_key, &summary.id)?;
+        for field in [&entry.service, &entry.username, &entry.password] {
+            let length = u16::try_from(field.len()).map_err(|_| "backup field is too large")?;
+            plaintext.0.extend_from_slice(&length.to_be_bytes());
+            plaintext.0.extend_from_slice(field.as_bytes());
+        }
+        if plaintext.0.len() > MAX_BACKUP_BYTES {
+            return Err("backup exceeds 4 MiB".into());
+        }
+    }
+    let salt = random_bytes::<16>()?;
+    let key = crate::crypto::derive_key(backup_passphrase, &salt)?;
+    let nonce = random_bytes::<NONCE_BYTES>()?;
+    let encrypted = encrypt(&key, &nonce, BACKUP_AAD, &plaintext.0);
+    let ciphertext = encrypted?;
+    let mut bytes =
+        Vec::with_capacity(BACKUP_MAGIC.len() + salt.len() + nonce.len() + ciphertext.len());
+    bytes.extend_from_slice(BACKUP_MAGIC);
+    bytes.extend_from_slice(&salt);
+    bytes.extend_from_slice(&nonce);
+    bytes.extend_from_slice(&ciphertext);
+
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) => {
+            wipe(&mut bytes);
+            return Err(format!("create encrypted backup: {error}"));
+        }
+    };
+    let write_result = (|| {
+        file.write_all(&bytes)
+            .map_err(|error| format!("write encrypted backup: {error}"))?;
+        file.sync_all()
+            .map_err(|error| format!("sync encrypted backup: {error}"))?;
+        Ok(())
+    })();
+    wipe(&mut bytes);
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(path);
+        return Err(error);
+    }
+    Ok(entries.len())
+}
+
+/// Restore backup records and re-encrypt them under the destination vault key atomically.
+pub fn import_backup(
+    connection: &Connection,
+    vault_key: &SecretKey,
+    backup_passphrase: &str,
+    path: &str,
+) -> Result<usize, String> {
+    if backup_passphrase.len() < 12 || backup_passphrase.len() > 1024 {
+        return Err("backup passphrase must contain 12..=1024 bytes".into());
+    }
+    let metadata =
+        fs::symlink_metadata(path).map_err(|error| format!("inspect encrypted backup: {error}"))?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.len() as usize > MAX_BACKUP_BYTES
+    {
+        return Err("backup must be a regular file no larger than 4 MiB".into());
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(path)
+        .and_then(|file| {
+            file.take((MAX_BACKUP_BYTES + 1) as u64)
+                .read_to_end(&mut bytes)
+        })
+        .map_err(|error| format!("read encrypted backup: {error}"))?;
+    if bytes.len() > MAX_BACKUP_BYTES || bytes.len() < BACKUP_MAGIC.len() + 16 + NONCE_BYTES + 16 {
+        wipe(&mut bytes);
+        return Err("encrypted backup has an invalid size".into());
+    }
+    if !bytes.starts_with(BACKUP_MAGIC) {
+        wipe(&mut bytes);
+        return Err("unsupported encrypted backup format".into());
+    }
+    let salt = fixed::<16>(
+        bytes[BACKUP_MAGIC.len()..BACKUP_MAGIC.len() + 16].to_vec(),
+        "backup salt",
+    )?;
+    let nonce_start = BACKUP_MAGIC.len() + 16;
+    let nonce = fixed::<NONCE_BYTES>(
+        bytes[nonce_start..nonce_start + NONCE_BYTES].to_vec(),
+        "backup nonce",
+    )?;
+    let key = crate::crypto::derive_key(backup_passphrase, &salt)?;
+    let plaintext_result = decrypt(
+        &key,
+        &nonce,
+        BACKUP_AAD,
+        &bytes[nonce_start + NONCE_BYTES..],
+    );
+    wipe(&mut bytes);
+    let mut plaintext = plaintext_result?;
+    let decoded = decode_backup(&plaintext);
+    wipe(&mut plaintext);
+    let mut records = decoded?;
+
+    connection.execute("BEGIN IMMEDIATE")?;
+    let mut imported = 0usize;
+    let result = (|| {
+        for record in &records {
+            add_entry(
+                connection,
+                vault_key,
+                &record.service,
+                &record.username,
+                &record.password,
+            )?;
+            imported += 1;
+        }
+        Ok(())
+    })();
+    for record in &mut records {
+        wipe(unsafe { record.service.as_bytes_mut() });
+        wipe(unsafe { record.username.as_bytes_mut() });
+        wipe(unsafe { record.password.as_bytes_mut() });
+    }
+    match result {
+        Ok(()) => connection.execute("COMMIT").map(|()| imported),
+        Err(error) => {
+            let _ = connection.execute("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
+fn decode_backup(bytes: &[u8]) -> Result<Vec<EntrySecret>, String> {
+    if bytes.len() < 4 {
+        return Err("encrypted backup payload is truncated".into());
+    }
+    let count = u32::from_be_bytes(
+        bytes[..4]
+            .try_into()
+            .map_err(|_| "invalid backup entry count")?,
+    ) as usize;
+    if count > 10_000 {
+        return Err("backup contains more than 10,000 entries".into());
+    }
+    let mut position = 4usize;
+    let mut records = Vec::with_capacity(count);
+    for _ in 0..count {
+        let mut fields = Vec::with_capacity(3);
+        for (label, maximum) in [
+            ("service", MAX_SERVICE_BYTES),
+            ("username", MAX_USERNAME_BYTES),
+            ("password", MAX_PASSWORD_BYTES),
+        ] {
+            let length_end = position
+                .checked_add(2)
+                .ok_or("backup field length overflow")?;
+            if length_end > bytes.len() {
+                return Err("encrypted backup record is truncated".into());
+            }
+            let length = u16::from_be_bytes(
+                bytes[position..length_end]
+                    .try_into()
+                    .map_err(|_| "invalid backup field length")?,
+            ) as usize;
+            position = length_end;
+            let field_end = position
+                .checked_add(length)
+                .ok_or("backup field length overflow")?;
+            if length > maximum || field_end > bytes.len() {
+                return Err(format!("encrypted backup {label} length is invalid"));
+            }
+            let field = String::from_utf8(bytes[position..field_end].to_vec())
+                .map_err(|_| format!("encrypted backup {label} is not UTF-8"))?;
+            validate_field(label, &field, 1, maximum)?;
+            fields.push(field);
+            position = field_end;
+        }
+        records.push(EntrySecret {
+            service: fields.remove(0),
+            username: fields.remove(0),
+            password: fields.remove(0),
+        });
+    }
+    if position != bytes.len() {
+        return Err("encrypted backup contains trailing data".into());
+    }
+    Ok(records)
+}
+
 fn validate_field(label: &str, value: &str, minimum: usize, maximum: usize) -> Result<(), String> {
     if value.len() < minimum
         || value.len() > maximum
@@ -325,7 +557,8 @@ pub fn database_path_from_environment() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        add_entry, create_vault, list_entries, open_database, read_entry, remove_entry, unlock,
+        add_entry, create_vault, export_backup, import_backup, list_entries, open_database,
+        read_entry, remove_entry, unlock,
     };
 
     #[test]
@@ -410,5 +643,99 @@ mod tests {
             );
         }
         std::fs::remove_dir_all(&directory).expect("remove test-owned directory");
+    }
+
+    #[test]
+    fn encrypted_backup_restores_to_a_different_vault() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let directory =
+            std::env::temp_dir().join(format!("vaultsmith-backup-{}-{unique}", std::process::id()));
+        std::fs::create_dir(&directory).expect("create test-owned directory");
+        let backup = directory.join("vault.vsb");
+        let backup_path = backup.to_str().expect("UTF-8 temp path");
+        let source = open_database(":memory:").expect("source database");
+        create_vault(&source, "source vault passphrase").expect("source vault");
+        let source_key = unlock(&source, "source vault passphrase").expect("source unlock");
+        add_entry(
+            &source,
+            &source_key,
+            "example.test",
+            "backup-user",
+            "backup-password-42",
+        )
+        .expect("source entry");
+        assert_eq!(
+            export_backup(
+                &source,
+                &source_key,
+                "separate backup passphrase",
+                backup_path
+            )
+            .expect("export"),
+            1
+        );
+        let bytes = std::fs::read(&backup).expect("backup bytes");
+        assert!(!bytes
+            .windows(b"backup-user".len())
+            .any(|part| part == b"backup-user"));
+        assert!(!bytes
+            .windows(b"backup-password-42".len())
+            .any(|part| part == b"backup-password-42"));
+        assert!(export_backup(
+            &source,
+            &source_key,
+            "separate backup passphrase",
+            backup_path
+        )
+        .is_err());
+
+        let target = open_database(":memory:").expect("target database");
+        create_vault(&target, "different target passphrase").expect("target vault");
+        let target_key = unlock(&target, "different target passphrase").expect("target unlock");
+        assert!(
+            import_backup(&target, &target_key, "wrong backup passphrase", backup_path).is_err()
+        );
+        assert!(list_entries(&target)
+            .expect("empty after failed import")
+            .is_empty());
+        let tampered_path = directory.join("tampered.vsb");
+        let mut tampered = bytes.clone();
+        let last = tampered.len() - 1;
+        tampered[last] ^= 0x40;
+        std::fs::write(&tampered_path, &tampered).expect("write tampered fixture");
+        assert!(import_backup(
+            &target,
+            &target_key,
+            "separate backup passphrase",
+            tampered_path.to_str().expect("UTF-8 temp path")
+        )
+        .is_err());
+        assert!(list_entries(&target)
+            .expect("empty after tampered import")
+            .is_empty());
+        assert_eq!(
+            import_backup(
+                &target,
+                &target_key,
+                "separate backup passphrase",
+                backup_path
+            )
+            .expect("import"),
+            1
+        );
+        let summaries = list_entries(&target).expect("restored entries");
+        let restored = read_entry(&target, &target_key, &summaries[0].id).expect("restored secret");
+        assert_eq!(restored.username, "backup-user");
+        assert_eq!(restored.password, "backup-password-42");
+        drop(restored);
+        drop(target_key);
+        drop(target);
+        drop(source_key);
+        drop(source);
+        std::fs::remove_dir_all(directory).expect("remove test-owned directory");
     }
 }

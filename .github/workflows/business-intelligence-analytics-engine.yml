@@ -1,5 +1,6 @@
 name: Business Intelligence Analytics Engine
 on:
+  workflow_dispatch:
   push:
     paths: ['business-intelligence-analytics-engine/**', '.github/workflows/business-intelligence-analytics-engine.yml']
   pull_request:

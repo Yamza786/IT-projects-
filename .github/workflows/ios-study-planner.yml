@@ -1,5 +1,6 @@
 name: iOS Study Planner
 on:
+  workflow_dispatch:
   push:
     paths: ['ios-study-planner/**', '.github/workflows/ios-study-planner.yml']
   pull_request:

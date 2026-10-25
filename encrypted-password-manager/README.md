@@ -9,6 +9,7 @@ Vaultsmith is a local command-line password vault built with Rust, SQLite, and O
 - SQLite schema migration, prepared statements, input bounds, generic unlock failures, and private Unix database permissions (`0600`, parent directory `0700` when created).
 - Interactive no-echo entry for passphrases and passwords. Secrets are not accepted as command-line arguments.
 - JSON-lines-friendly output for scripts; passwords appear only for the explicit `show` command.
+- Portable versioned AES-256-GCM backup export/import using an independent backup passphrase; imports atomically re-encrypt records for the destination vault.
 
 ## Requirements and setup
 
@@ -30,6 +31,9 @@ Run from this directory. These commands prompt interactively; use a unique synth
 cargo run -- --db ./demo-vault.sqlite init
 cargo run -- --db ./demo-vault.sqlite add
 cargo run -- --db ./demo-vault.sqlite list
+cargo run -- --db ./demo-vault.sqlite export ./demo-vault.vsb
+# To restore into an initialized destination vault:
+cargo run -- --db ./restored-vault.sqlite import ./demo-vault.vsb
 # Copy the printed ID, then:
 cargo run -- --db ./demo-vault.sqlite show ENTRY_ID
 cargo run -- --db ./demo-vault.sqlite remove ENTRY_ID
@@ -52,7 +56,7 @@ The vault has one encrypted verifier for passphrase validation. Usernames and pa
 
 ## Tests and security notes
 
-Tests cover authenticated-encryption tampering/AAD, short passphrase rejection, vault lifecycle, input validation, ciphertext-at-rest, and private file mode. CI runs formatting, unit tests, and Clippy. OpenSSL and SQLite APIs are called through small FFI modules to avoid network-fetched Rust dependencies; changing those interfaces requires careful review. This MVP has not undergone an independent security audit and should not be used as an enterprise password manager.
+Tests cover authenticated-encryption tampering/AAD, short passphrase rejection, vault lifecycle, input validation, ciphertext-at-rest, private file mode, encrypted backup portability, wrong-passphrase rejection, and no-overwrite behavior. SQLite waits up to five seconds for locks. CI runs formatting, unit tests, and Clippy. OpenSSL and SQLite APIs are called through small FFI modules to avoid network-fetched Rust dependencies; changing those interfaces requires careful review. This MVP has not undergone an independent security audit and should not be used as an enterprise password manager. Windows ACL verification remains pending.
 
 ## Contribution
 

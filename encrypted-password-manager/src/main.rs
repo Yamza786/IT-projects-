@@ -18,7 +18,7 @@ fn run() -> Result<(), String> {
     let database_path = if arguments.first().map(String::as_str) == Some("--db") {
         if arguments.len() < 3 {
             return Err(
-                "usage: vaultsmith [--db PATH] <init|add|list|show|remove> [ENTRY_ID]".into(),
+                "usage: vaultsmith [--db PATH] <init|add|list|show|remove|export|import> [ENTRY_ID|BACKUP_PATH]".into(),
             );
         }
         let path = arguments.remove(1);
@@ -28,7 +28,7 @@ fn run() -> Result<(), String> {
         vault::database_path_from_environment()
     };
     let Some(action) = arguments.first().map(String::as_str) else {
-        return Err("usage: vaultsmith [--db PATH] <init|add|list|show|remove> [ENTRY_ID]".into());
+        return Err("usage: vaultsmith [--db PATH] <init|add|list|show|remove|export|import> [ENTRY_ID|BACKUP_PATH]".into());
     };
     let remaining = &arguments[1..];
     match action {
@@ -131,6 +131,36 @@ fn run() -> Result<(), String> {
                 json_quote(&remaining[0])
             );
         }
+        "export" => {
+            require_argument_count(remaining, 1, "export")?;
+            let database = vault::open_database(&database_path)?;
+            let mut passphrase = terminal::read_secret("Vault passphrase: ", 1024)?;
+            let unlocked = vault::unlock(&database, &passphrase);
+            crypto::wipe(unsafe { passphrase.as_bytes_mut() });
+            let key = unlocked?;
+            let mut backup_passphrase =
+                terminal::read_secret("New backup passphrase (12+ bytes): ", 1024)?;
+            let result = vault::export_backup(&database, &key, &backup_passphrase, &remaining[0]);
+            crypto::wipe(unsafe { backup_passphrase.as_bytes_mut() });
+            let count = result?;
+            println!(
+                "{{\"event\":\"backup_exported\",\"entries\":{count},\"path\":{}}}",
+                json_quote(&remaining[0])
+            );
+        }
+        "import" => {
+            require_argument_count(remaining, 1, "import")?;
+            let database = vault::open_database(&database_path)?;
+            let mut passphrase = terminal::read_secret("Destination vault passphrase: ", 1024)?;
+            let unlocked = vault::unlock(&database, &passphrase);
+            crypto::wipe(unsafe { passphrase.as_bytes_mut() });
+            let key = unlocked?;
+            let mut backup_passphrase = terminal::read_secret("Backup passphrase: ", 1024)?;
+            let result = vault::import_backup(&database, &key, &backup_passphrase, &remaining[0]);
+            crypto::wipe(unsafe { backup_passphrase.as_bytes_mut() });
+            let count = result?;
+            println!("{{\"event\":\"backup_imported\",\"entries\":{count}}}");
+        }
         "help" | "--help" | "-h" => {
             if !remaining.is_empty() {
                 return Err("help takes no arguments".into());
@@ -160,7 +190,7 @@ fn require_argument_count(
 }
 
 fn print_help() {
-    println!("Vaultsmith — local encrypted password vault\n\nUsage:\n  vaultsmith [--db PATH] init\n  vaultsmith [--db PATH] add\n  vaultsmith [--db PATH] list\n  vaultsmith [--db PATH] show ENTRY_ID\n  vaultsmith [--db PATH] remove ENTRY_ID\n\nThe default database is ./vaultsmith.sqlite or VAULTSMITH_DB. Passphrases and stored passwords are read without terminal echo and never accepted as command-line arguments.");
+    println!("Vaultsmith — local encrypted password vault\n\nUsage:\n  vaultsmith [--db PATH] init\n  vaultsmith [--db PATH] add\n  vaultsmith [--db PATH] list\n  vaultsmith [--db PATH] show ENTRY_ID\n  vaultsmith [--db PATH] remove ENTRY_ID\n  vaultsmith [--db PATH] export BACKUP_PATH\n  vaultsmith [--db PATH] import BACKUP_PATH\n\nBackups use a separate passphrase and AES-256-GCM. The default database is ./vaultsmith.sqlite or VAULTSMITH_DB. Passphrases and stored passwords are read without terminal echo and never accepted as command-line arguments.");
 }
 
 fn json_quote(value: &str) -> String {

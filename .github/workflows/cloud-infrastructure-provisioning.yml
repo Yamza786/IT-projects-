@@ -1,5 +1,6 @@
 name: Cloud Infrastructure Provisioning
 on:
+  workflow_dispatch:
   push:
     paths: ['cloud-infrastructure-provisioning/**', '.github/workflows/cloud-infrastructure-provisioning.yml']
   pull_request:
