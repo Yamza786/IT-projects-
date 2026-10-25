@@ -7,7 +7,7 @@ port="${PAYROLL_SMOKE_PORT:-18983}"
 export PAYROLL_DATABASE="$tmp/payroll.sqlite"
 export PAYROLL_ADMIN_TOKEN="smoke-admin-token-0123456789abcdef"
 export PAYROLL_REVIEWER_TOKEN="smoke-review-token-0123456789abcdef"
-php -S "127.0.0.1:$port" -t "$root/public" >"$tmp/server.log" 2>&1 &
+php -S "127.0.0.1:$port" -t "$root/public" "$root/public/index.php" >"$tmp/server.log" 2>&1 &
 server_pid=$!
 cleanup() { kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true; rm -rf "$tmp"; }
 trap cleanup EXIT
