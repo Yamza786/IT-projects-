@@ -9,11 +9,12 @@ Install Flutter stable and enable the Linux or Windows desktop target:
 ```sh
 flutter config --enable-linux-desktop
 flutter pub get
+flutter create --platforms=linux .
 flutter test
 flutter run -d linux
 ```
 
-For Windows, enable `windows-desktop` and use `flutter run -d windows`. Linux stores the database under `${XDG_DATA_HOME:-$HOME/.local/share}/PortfolioKnowledgeManager`; Windows uses `%APPDATA%\PortfolioKnowledgeManager`.
+For Windows, enable `windows-desktop`, run `flutter create --platforms=windows .`, then use `flutter run -d windows`. Linux stores the database under `${XDG_DATA_HOME:-$HOME/.local/share}/PortfolioKnowledgeManager`; Windows uses `%APPDATA%\PortfolioKnowledgeManager`.
 
 The backup flow derives a 256-bit key with PBKDF2-HMAC-SHA256 (210,000 iterations) and a random 128-bit salt, then encrypts with AES-256-GCM. Backups contain no plaintext note data; import verifies the authentication tag and replaces notes in a transaction after explicit confirmation. Use a unique passphrase of at least 12 characters and keep it separately: it cannot be recovered.
 
