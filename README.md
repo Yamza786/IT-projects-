@@ -1,6 +1,8 @@
 # IT-projects-
 
-A portfolio repository containing 25 practical, independently runnable applications alongside educational examples and starter templates. The portfolio demonstrates local-first product design, full-stack workflows, data analysis, defensive security, accessibility, integration, and deployment practice.
+A portfolio repository cataloging 60 projects: 25 practical applications, a 30-project multi-language engineering program, and five additional learning repositories. The portfolio demonstrates local-first product design, full-stack workflows, data analysis, defensive security, accessibility, integration, and deployment practice.
+
+**Browse:** [interactive project catalog](portfolio-command-center/README.md) · [30-project index](portfolio/INDEX.md) · [skills matrix](portfolio/SKILLS_MATRIX.md) · [roadmap](PORTFOLIO_ROADMAP.md)
 
 ## The 15-project portfolio
 
@@ -43,29 +45,13 @@ The first runnable release details are in [portfolio/ROADMAP.md](portfolio/ROADM
 
 ## 30-project IT and Computer Science portfolio program
 
-The staged implementation plan, build order, requirements, dependencies, milestones and verification strategy for a 30-project portfolio program are tracked in [PORTFOLIO_ROADMAP.md](PORTFOLIO_ROADMAP.md). Its project [index](portfolio/INDEX.md) and [skills matrix](portfolio/SKILLS_MATRIX.md) track progress separately from the existing applications above. All 30 projects now have implementation work and project-specific CI; verified results and outstanding checks are recorded below and in the index. The program includes the [Enterprise SaaS Management Platform](enterprise-saas-management/README.md), [Pocket Ledger Android app](personal-finance-android/README.md), [Network Monitoring Suite](network-monitoring-suite/README.md), [Signal Desk Mini SIEM](mini-siem-platform/README.md), [Relay Arena multiplayer game](multiplayer-3d-game/README.md), [Schema Guard migration toolkit](database-migration-toolkit/README.md), [Hearthline smart home system](smart-home-iot/README.md), [Pipeline Forge CI/CD runner](cicd-automation-platform/README.md), [Market Square marketplace](ecommerce-marketplace/README.md), [SysCare Linux administration toolkit](linux-system-admin-toolkit/README.md), [Vaultsmith password manager](encrypted-password-manager/README.md), [iOS Study Planner](ios-study-planner/README.md), [InfraGuard infrastructure provisioning](cloud-infrastructure-provisioning/README.md), [Phoenix Collaboration Platform](realtime-collaboration-platform/README.md), [BI Workbench](business-intelligence-analytics-engine/README.md), [Browser-Based IDE and Code Runner](browser-ide-code-runner/README.md), [Digital Forensics Toolkit](digital-forensics-toolkit/README.md), the [Blockchain Voting and Audit Prototype](blockchain-voting-audit-prototype/README.md), the [API Gateway and Rate-Limiting Service](api-gateway-rate-limiter/README.md), the [Computer Vision Application](computer-vision-application/README.md), [TinyLang](custom-programming-language/README.md), and the [Process and Memory Visualizer](process-memory-visualizer/README.md), along with projects 23–30 listed below. New work in this program excludes Python; existing repository projects are preserved as-is.
+The staged implementation plan, build order, requirements, dependencies, milestones and verification strategy are tracked in [PORTFOLIO_ROADMAP.md](PORTFOLIO_ROADMAP.md). The complete project [index](portfolio/INDEX.md), interactive 60-project [catalog](portfolio-command-center/README.md), and [skills matrix](portfolio/SKILLS_MATRIX.md) provide searchable and competency-based views. All 30 projects in this program have implementation work and project-specific CI; verified results and outstanding checks are recorded in the index and roadmap. New work in this program excludes Python; older repository projects are preserved as-is.
 
 ### Latest 30-project verification snapshot
 
 On 2026-10-25, the GitHub Actions batch verified projects 1, 3–4, and 6–30, including tests, builds, and the service integrations defined by their workflows. Project 2's migration contract, unit tests, and debug APK build passed, but its Room instrumentation job timed out while the Android emulator was booting on Ubuntu 24.04. The workflow now pins that job to Ubuntu 22.04 and adds a 20-minute step timeout; GitHub could not start the retry because the account's Actions billing/spending limit needs attention. Project 5's license-free C# game-rules harness passed; Unity Editor and player-build checks were skipped because the repository has no `UNITY_LICENSE` secret. These two platform checks remain unverified.
 
 The Android workflow failure and retry are visible in [GitHub Actions](https://github.com/Yamza786/IT-projects-/actions/workflows/personal-finance-android.yml). The Unity rules harness and license-gated Editor/build jobs are in [Unity multiplayer verification](https://github.com/Yamza786/IT-projects-/actions/runs/40214667556). Re-enable Actions billing to rerun Android instrumentation, and configure the repository `UNITY_LICENSE` secret to run Unity Editor and player checks.
-
-Project 23, the [Desktop Knowledge Manager](desktop-knowledge-manager/README.md), is now in implementation with local SQLite notes, search, an encrypted backup flow, and Flutter desktop CI.
-
-Project 24, the [Enterprise HR and Payroll Prototype](enterprise-hr-payroll/README.md), adds role-separated employee management, fixed-cents calculations, audit events, and CSV reports.
-
-Project 25, [Portfolio Testkit](automated-testing-framework/README.md), provides reusable Node.js test cases, fixtures, assertions, and machine-readable reports.
-
-Project 26, [Cloud File Storage and Synchronization](cloud-file-sync/README.md), implements authenticated resumable chunks, integrity checks, and optimistic file versions.
-
-Project 27, [Fraud and Anomaly Detection Workbench](fraud-anomaly-workbench/README.md), demonstrates explainable baselines and human review using synthetic data.
-
-Project 28, [Windows Configuration and Compliance Scanner](windows-compliance-scanner/README.md), adds read-only Windows policy checks and actionable reports.
-
-Project 29, [Game Modding and Scripting Framework](game-modding-framework/README.md), hosts versioned Lua mods in a bounded C# sandbox.
-
-Project 30, [Distributed Job Queue and Workflow Engine](distributed-workflow-queue/README.md), adds durable SQLite jobs, atomic worker leases, retries and dependencies in Scala.
 
 ## Verify the portfolio workflows
 

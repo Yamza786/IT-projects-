@@ -1,6 +1,6 @@
 # New IT and Computer Science Portfolio Index
 
-The 30-project program is tracked in [`../PORTFOLIO_ROADMAP.md`](../PORTFOLIO_ROADMAP.md). Status here reflects implementation evidence for that program; existing repository applications remain listed in the root README.
+This is the canonical index for the 30-project program. The interactive [Portfolio Command Center](../portfolio-command-center/README.md) showcases all 60 catalog entries: the original 25 applications, this 30-project program, and five additional learning repositories. Status here reflects implementation and verification evidence for these 30 projects; see the [roadmap](../PORTFOLIO_ROADMAP.md) for requirements and known limitations.
 
 | # | Project | Description | Languages | Complexity | Status | Demonstration |
 |---:|---|---|---|---|---|---|
@@ -34,13 +34,3 @@ The 30-project program is tracked in [`../PORTFOLIO_ROADMAP.md`](../PORTFOLIO_RO
 | 28 | [Windows Configuration and Compliance Scanner](../windows-compliance-scanner/README.md) | Read-only Windows policy checks with explicit unknown states and safe guidance. | PowerShell | Advanced | Pester fixtures and read-only Windows smoke passed in GitHub Actions 2026-10-25 | `pwsh -File scripts/scan.ps1` |
 | 29 | [Game Modding and Scripting Framework](../game-modding-framework/README.md) | Versioned C# plugin host with restricted Lua syntax and explicit mod events. | C#, Lua | Advanced | Host capability/limit tests passed GitHub Actions 2026-10-25 | `dotnet test tests/GameMods.Tests` |
 | 30 | [Distributed Job Queue and Workflow Engine](../distributed-workflow-queue/README.md) | SQLite-backed Scala jobs with atomic claims, leases, retries and dependencies. | Scala, SQL | Advanced | ScalaTest and SQLite integration passed GitHub Actions 2026-10-25 | `sbt test` |
-| 21 | Custom Programming Language | Small typed language with parser, evaluator and diagnostics. | Rust | Advanced | Planned | — |
-| 22 | Operating-System Process and Memory Visualizer | Process and memory snapshots presented as readable system views. | C | Advanced | Planned | — |
-| 23 | Cross-Platform Desktop Knowledge Manager | Local notes, search, links and portable backup for desktop users. | Dart, Flutter | Advanced | Planned | — |
-| 24 | Enterprise HR and Payroll System | Permission-checked employee records and auditable payroll calculations. | PHP, SQL | Advanced | Planned | — |
-| 25 | Automated Software Testing Framework | Reusable fixtures, assertions and reports for application tests. | JavaScript | Advanced | Planned | — |
-| 26 | Cloud File Storage and Synchronization | Resumable file transfer with integrity and conflict handling. | Java | Advanced | Planned | — |
-| 27 | Fraud and Anomaly Detection Workbench | Reproducible anomaly scoring with analyst review workflows. | Julia, SQL | Advanced | Planned | — |
-| 28 | Windows Configuration and Compliance Scanner | Read-only configuration checks with evidence and remediation notes. | PowerShell | Intermediate | Planned | — |
-| 29 | Game Modding and Scripting Framework | Versioned game plugin API with capability-limited Lua scripts. | Lua, C# | Advanced | Planned | — |
-| 30 | Distributed Job Queue and Workflow Engine | Durable distributed jobs with retry, idempotency and dependencies. | Scala | Advanced | Planned | — |
