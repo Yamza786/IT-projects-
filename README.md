@@ -49,6 +49,8 @@ Project 23, the [Desktop Knowledge Manager](desktop-knowledge-manager/README.md)
 
 Project 24, the [Enterprise HR and Payroll Prototype](enterprise-hr-payroll/README.md), adds role-separated employee management, fixed-cents calculations, audit events, and CSV reports.
 
+Project 25, [Portfolio Testkit](automated-testing-framework/README.md), provides reusable Node.js test cases, fixtures, assertions, and machine-readable reports.
+
 ## Verify the portfolio workflows
 
 Use Python 3.12 or newer and install dependencies with `python -m pip install -r requirements-termux.txt`. Run the same suite as CI:

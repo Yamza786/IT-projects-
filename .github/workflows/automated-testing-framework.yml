@@ -1,0 +1,31 @@
+name: Automated testing framework
+
+on:
+  push:
+    paths:
+      - "automated-testing-framework/**"
+      - ".github/workflows/automated-testing-framework.yml"
+  pull_request:
+    paths:
+      - "automated-testing-framework/**"
+      - ".github/workflows/automated-testing-framework.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: automated-testing-framework
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm install --package-lock-only --ignore-scripts
+      - run: npm ci --ignore-scripts
+      - run: npm audit --audit-level=high
+      - run: npm test
+      - run: npm run demo
