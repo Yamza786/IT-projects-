@@ -27,7 +27,7 @@ Dependency versions are pinned in the Gradle Kotlin DSL. No generated wrapper JA
 
 ## Tests
 
-`gradle testDebugUnitTest` covers amount and recurrence boundaries plus CSV escaping. `gradle connectedDebugAndroidTest` tests legacy schema migration, budget preservation, recurring idempotency, reports and CSV against Room/SQLite on an emulator. CI runs both tasks. `node --test tooling/migration-contract.test.mjs` executes the SQL statements extracted from the Room migration against SQLite and checks budget preservation, composite currency keys and recurrence foreign keys; this contract test passed locally. It does not replace the Room/emulator checks. This Termux environment lacks Gradle, Kotlin/JDK and Android SDK, so Android build and instrumentation checks remain pending locally.
+`gradle testDebugUnitTest` covers amount and recurrence boundaries plus CSV escaping. `gradle connectedDebugAndroidTest` tests legacy schema migration, budget preservation, recurring idempotency, reports and CSV against Room/SQLite on an emulator. CI runs both tasks. `node --test tooling/migration-contract.test.mjs` executes the SQL statements extracted from the Room migration against SQLite and checks budget preservation, composite currency keys and recurrence foreign keys. On 2026-10-25, GitHub Actions passed this migration contract, JVM unit tests and the debug APK build. The emulator instrumentation job timed out before Android API 35 booted on Ubuntu 24.04. The workflow now pins instrumentation to Ubuntu 22.04; GitHub did not start the retry because the account's Actions billing/spending limit blocks runners. This Termux environment lacks Gradle, Kotlin/JDK and Android SDK, so local Android build and instrumentation checks remain unavailable.
 
 ## Security and limitations
 
@@ -39,4 +39,4 @@ Enter `12.50` and category `Groceries`, then tap **Add expense**. The amount is 
 
 ## Project status and contribution
 
-MVP source, local persistence, budgets, recurrence, reporting, CSV export and a Room migration test are implemented; Android build/emulator verification remains pending because Gradle/JDK/Android SDK are unavailable in this environment. Keep money in integer minor units, add forward migrations and migration tests for schema changes, use synthetic data, and test on emulator before claiming device support. See the repository contribution guide.
+MVP source, local persistence, budgets, recurrence, reporting and CSV export are implemented. GitHub Actions verified JVM unit tests and the debug build; Room/emulator instrumentation remains unverified until the Actions billing/spending restriction is resolved and the updated Ubuntu 22.04 workflow can run. Keep money in integer minor units, add forward migrations and migration tests for schema changes, and use synthetic data. See the repository contribution guide.
