@@ -1,0 +1,36 @@
+name: Browser IDE Code Runner checks
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "browser-ide-code-runner/**"
+      - ".github/workflows/browser-ide-code-runner.yml"
+  pull_request:
+    paths:
+      - "browser-ide-code-runner/**"
+      - ".github/workflows/browser-ide-code-runner.yml"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-ide-code-runner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache-dependency-path: browser-ide-code-runner/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: browser-ide-code-runner/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run build
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go build -o /tmp/browser-ide ./cmd/coderunner

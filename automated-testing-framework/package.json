@@ -1,0 +1,12 @@
+{
+  "name": "portfolio-testkit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny dependency-free JavaScript test runner with fixtures and TAP/JSON reporting",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test",
+    "demo": "node bin/run-tests.mjs --reporter=tap examples/calculator.test.mjs"
+  }
+}

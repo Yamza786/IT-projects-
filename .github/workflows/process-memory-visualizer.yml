@@ -1,0 +1,25 @@
+name: Process and memory visualizer
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "process-memory-visualizer/**"
+      - ".github/workflows/process-memory-visualizer.yml"
+  pull_request:
+    paths:
+      - "process-memory-visualizer/**"
+      - ".github/workflows/process-memory-visualizer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S process-memory-visualizer -B build/proc-viz -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/proc-viz --parallel 2
+      - run: ctest --test-dir build/proc-viz --output-on-failure
+      - run: build/proc-viz/proc-viz

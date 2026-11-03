@@ -1,0 +1,43 @@
+name: Smart home IoT checks
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "smart-home-iot/**"
+      - ".github/workflows/smart-home-iot.yml"
+  pull_request:
+    paths:
+      - "smart-home-iot/**"
+      - ".github/workflows/smart-home-iot.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build and broker dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libssl-dev mosquitto mosquitto-clients
+      - name: Build Eclipse Paho MQTT C++ 1.6.0
+        run: |
+          git clone --depth 1 --branch v1.6.0 --recurse-submodules https://github.com/eclipse-paho/paho.mqtt.cpp.git /tmp/paho-mqtt-cpp
+          cmake -S /tmp/paho-mqtt-cpp -B /tmp/paho-mqtt-cpp/build \
+            -DPAHO_BUILD_SHARED=ON -DPAHO_BUILD_STATIC=OFF \
+            -DPAHO_WITH_SSL=ON -DPAHO_WITH_MQTT_C=ON \
+            -DPAHO_BUILD_SAMPLES=OFF -DPAHO_BUILD_TESTS=OFF
+          cmake --build /tmp/paho-mqtt-cpp/build --parallel 2
+          sudo cmake --install /tmp/paho-mqtt-cpp/build
+          sudo ldconfig
+      - name: Build application and core tests
+        run: |
+          cmake -S smart-home-iot -B smart-home-iot/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build smart-home-iot/build --parallel 2
+          ctest --test-dir smart-home-iot/build --output-on-failure
+      - name: Verify MQTT broker command and status flow
+        working-directory: smart-home-iot
+        run: sh tests/mqtt-smoke.sh ./build/smarthome

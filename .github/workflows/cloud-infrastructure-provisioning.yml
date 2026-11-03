@@ -1,0 +1,24 @@
+name: Cloud Infrastructure Provisioning
+on:
+  workflow_dispatch:
+  push:
+    paths: ['cloud-infrastructure-provisioning/**', '.github/workflows/cloud-infrastructure-provisioning.yml']
+  pull_request:
+    paths: ['cloud-infrastructure-provisioning/**', '.github/workflows/cloud-infrastructure-provisioning.yml']
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud-infrastructure-provisioning
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - uses: opentofu/setup-opentofu@v1
+      - run: go test ./...
+      - run: go vet ./...
+      - run: tofu fmt -check -recursive terraform
+      - run: tofu -chdir=terraform init -backend=false -input=false
+      - run: tofu -chdir=terraform validate

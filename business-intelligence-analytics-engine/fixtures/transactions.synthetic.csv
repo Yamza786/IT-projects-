@@ -1,0 +1,6 @@
+transaction_id,booked_on,amount_cents,direction,category,source_id
+txn-001,2026-01-03,12500,income,services,demo-ledger
+txn-002,2026-01-04,2300,expense,transport,demo-ledger
+txn-003,2026-01-08,4500,expense,food,demo-ledger
+txn-004,2026-02-01,18000,income,services,demo-ledger
+txn-005,2026-02-02,1200,expense,food,demo-ledger

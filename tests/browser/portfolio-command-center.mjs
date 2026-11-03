@@ -8,16 +8,20 @@ try {
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.getByRole('heading', { name: 'IT/CS Portfolio', exact: true }).waitFor();
   await page.locator('.card').first().waitFor();
-  assert.equal(await page.locator('.card').count(), 25, 'renders all portfolio entries');
-  assert.match(await page.locator('#count').innerText(), /Showing 25 of 25 projects/);
+  assert.equal(await page.locator('.card').count(), 60, 'renders every project in all three catalog collections');
+  assert.match(await page.locator('#count').innerText(), /Showing 60 of 60 projects/);
 
   const search = page.getByRole('searchbox', { name: 'Search projects' });
   await search.fill('security');
-  assert.equal(await page.locator('.card').count(), 4, 'search filters project names, categories, and summaries');
+  assert.equal(await page.locator('.card').count(), 10, 'search filters across the full catalog');
+
+  await search.fill('Julia');
+  assert.equal(await page.locator('.card').count(), 1, 'search includes project technology stacks');
+  assert.equal(await page.locator('.card h2').innerText(), 'Fraud and Anomaly Detection Workbench');
 
   await search.fill('');
   await page.getByRole('button', { name: 'Security', exact: true }).click();
-  assert.equal(await page.locator('.card').count(), 4, 'category filter selects matching projects');
+  assert.equal(await page.locator('.card').count(), 10, 'category filter selects matching projects');
 
   await page.setViewportSize({ width: 320, height: 700 });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);

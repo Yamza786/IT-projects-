@@ -1,0 +1,45 @@
+name: E-commerce marketplace checks
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ecommerce-marketplace/**"
+      - ".github/workflows/ecommerce-marketplace.yml"
+  pull_request:
+    paths:
+      - "ecommerce-marketplace/**"
+      - ".github/workflows/ecommerce-marketplace.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ecommerce-marketplace/package-lock.json
+      - name: Install, inspect and test
+        working-directory: ecommerce-marketplace
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm audit --audit-level=high
+      - name: Build production image
+        run: docker build -t ecommerce-marketplace:ci ecommerce-marketplace
+      - name: Smoke test the production container
+        run: |
+          docker run -d --name marketplace-smoke -p 127.0.0.1:18091:3001 -v marketplace-smoke-data:/data ecommerce-marketplace:ci
+          trap 'docker rm -f marketplace-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18091/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18091/health >/dev/null
+          curl --fail --silent http://127.0.0.1:18091/ | grep -q 'Market Square'

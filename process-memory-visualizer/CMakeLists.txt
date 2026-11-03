@@ -1,0 +1,21 @@
+cmake_minimum_required(VERSION 3.20)
+project(proc_memory_visualizer C)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+
+add_library(proc_snapshot src/proc_snapshot.c)
+target_include_directories(proc_snapshot PUBLIC include)
+target_compile_options(proc_snapshot PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+add_executable(proc-viz src/main.c)
+target_link_libraries(proc-viz PRIVATE proc_snapshot)
+target_compile_options(proc-viz PRIVATE -Wall -Wextra -Wpedantic -Werror)
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(proc-snapshot-test tests/proc_snapshot_test.c)
+  target_link_libraries(proc-snapshot-test PRIVATE proc_snapshot)
+  target_compile_options(proc-snapshot-test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  add_test(NAME proc-snapshot-test COMMAND proc-snapshot-test)
+endif()

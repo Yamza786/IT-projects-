@@ -1,0 +1,16 @@
+name: Game modding framework
+on:
+  workflow_dispatch:
+  push:
+    paths: ['game-modding-framework/**', '.github/workflows/game-modding-framework.yml']
+  pull_request:
+    paths: ['game-modding-framework/**', '.github/workflows/game-modding-framework.yml']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet test game-modding-framework/tests/GameMods.Tests/GameMods.Tests.csproj --configuration Release

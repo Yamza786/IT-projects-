@@ -1,0 +1,28 @@
+name: Business Intelligence Analytics Engine
+on:
+  workflow_dispatch:
+  push:
+    paths: ['business-intelligence-analytics-engine/**', '.github/workflows/business-intelligence-analytics-engine.yml']
+  pull_request:
+    paths: ['business-intelligence-analytics-engine/**', '.github/workflows/business-intelligence-analytics-engine.yml']
+jobs:
+  r-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: business-intelligence-analytics-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.2'
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::DBI
+            any::RSQLite
+            any::testthat
+      - run: Rscript tests/testthat.R
+      - run: Rscript scripts/bi.R init --db build/ci.sqlite
+      - run: Rscript scripts/bi.R import --db build/ci.sqlite --csv fixtures/transactions.synthetic.csv
+      - run: Rscript scripts/bi.R report --db build/ci.sqlite --month 2026-01

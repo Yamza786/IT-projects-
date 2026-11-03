@@ -1,6 +1,8 @@
 # IT-projects-
 
-A portfolio repository containing 25 practical, independently runnable applications alongside educational examples and starter templates. The portfolio demonstrates local-first product design, full-stack workflows, data analysis, defensive security, accessibility, integration, and deployment practice.
+A portfolio repository cataloging 60 projects: 25 practical applications, a 30-project multi-language engineering program, and five additional learning repositories. The portfolio demonstrates local-first product design, full-stack workflows, data analysis, defensive security, accessibility, integration, and deployment practice.
+
+**Browse:** [all 60 projects and interactive catalog](portfolio-command-center/README.md) · [30-project index](portfolio/INDEX.md) · [skills matrix](portfolio/SKILLS_MATRIX.md) · [roadmap](PORTFOLIO_ROADMAP.md)
 
 ## The 15-project portfolio
 
@@ -41,9 +43,19 @@ The staged implementation record is in [portfolio/ROADMAP.md](portfolio/ROADMAP.
 
 The first runnable release details are in [portfolio/ROADMAP.md](portfolio/ROADMAP.md). Security and network tools are designed for systems and networks you own or are authorized to assess; they do not perform exploitation or broad network scanning.
 
+## 30-project IT and Computer Science portfolio program
+
+The staged implementation plan, build order, requirements, dependencies, milestones and verification strategy are tracked in [PORTFOLIO_ROADMAP.md](PORTFOLIO_ROADMAP.md). The complete project [index](portfolio/INDEX.md), interactive 60-project [catalog](portfolio-command-center/README.md), and [skills matrix](portfolio/SKILLS_MATRIX.md) provide searchable and competency-based views. All 30 projects in this program have implementation work and project-specific CI; verified results and outstanding checks are recorded in the index and roadmap. New work in this program excludes Python; older repository projects are preserved as-is.
+
+### Latest 30-project verification snapshot
+
+On 2026-10-25, the GitHub Actions batch verified projects 1, 3–4, and 6–30, including tests, builds, and the service integrations defined by their workflows. Project 2's migration contract, unit tests, and debug APK build passed, but its Room instrumentation job timed out while the Android emulator was booting on Ubuntu 24.04. The workflow now pins that job to Ubuntu 22.04 and adds a 20-minute step timeout; GitHub could not start the retry because the account's Actions billing/spending limit needs attention. Project 5's license-free C# game-rules harness passed; Unity Editor and player-build checks were skipped because the repository has no `UNITY_LICENSE` secret. These two platform checks remain unverified.
+
+The Android workflow failure and retry are visible in [GitHub Actions](https://github.com/Yamza786/IT-projects-/actions/workflows/personal-finance-android.yml). The Unity rules harness and license-gated Editor/build jobs are in [Unity multiplayer verification](https://github.com/Yamza786/IT-projects-/actions/runs/40214667556). Re-enable Actions billing to rerun Android instrumentation, and configure the repository `UNITY_LICENSE` secret to run Unity Editor and player checks.
+
 ## Verify the portfolio workflows
 
-Use Python 3.12 or newer and install dependencies with `python -m pip install -r requirements-termux.txt`. Run the same suite as CI:
+The existing repository-wide suite (which covers legacy projects that use Python) requires Python 3.12 or newer. Install dependencies with `python -m pip install -r requirements-termux.txt`, then run:
 
 ```sh
 python -m pytest tests -q

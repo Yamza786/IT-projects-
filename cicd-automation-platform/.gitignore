@@ -1,0 +1,3 @@
+/bin/
+/.pipeline/runs/
+*.log

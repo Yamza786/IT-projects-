@@ -1,0 +1,37 @@
+name: Enterprise HR and payroll
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "enterprise-hr-payroll/**"
+      - ".github/workflows/enterprise-hr-payroll.yml"
+  pull_request:
+    paths:
+      - "enterprise-hr-payroll/**"
+      - ".github/workflows/enterprise-hr-payroll.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, pdo_sqlite, dom, xml, xmlwriter
+          coverage: none
+      - name: Validate composer manifest
+        run: composer validate --no-check-publish enterprise-hr-payroll/composer.json
+      - name: Install dependencies
+        working-directory: enterprise-hr-payroll
+        run: composer install --no-interaction --prefer-dist
+      - name: Unit tests
+        working-directory: enterprise-hr-payroll
+        run: composer test
+      - name: HTTP integration smoke
+        working-directory: enterprise-hr-payroll
+        run: bash scripts/smoke.sh

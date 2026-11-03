@@ -1,0 +1,30 @@
+name: Windows compliance scanner
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "windows-compliance-scanner/**"
+      - ".github/workflows/windows-compliance-scanner.yml"
+  pull_request:
+    paths:
+      - "windows-compliance-scanner/**"
+      - ".github/workflows/windows-compliance-scanner.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pester 5
+        shell: pwsh
+        run: Install-Module Pester -MinimumVersion 5.6.1 -Scope CurrentUser -Force -SkipPublisherCheck
+      - name: Run tests
+        shell: pwsh
+        run: Invoke-Pester -Path windows-compliance-scanner/tests -CI
+      - name: Read-only scan smoke
+        shell: pwsh
+        run: ./windows-compliance-scanner/scripts/scan.ps1 -Format Json

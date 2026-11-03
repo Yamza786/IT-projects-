@@ -1,0 +1,39 @@
+name: Database migration toolkit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "database-migration-toolkit/**"
+      - ".github/workflows/database-migration-toolkit.yml"
+  pull_request:
+    paths:
+      - "database-migration-toolkit/**"
+      - ".github/workflows/database-migration-toolkit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: database-migration-toolkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - run: gradle test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: schema-guard-test-report
+          path: database-migration-toolkit/build/test-results/test/
+          if-no-files-found: warn
+      - run: gradle run --args=validate

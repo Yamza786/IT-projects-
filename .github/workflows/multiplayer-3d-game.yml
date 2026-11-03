@@ -1,0 +1,90 @@
+name: Unity multiplayer verification
+
+on:
+  push:
+    paths:
+      - "multiplayer-3d-game/**"
+      - ".github/workflows/multiplayer-3d-game.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rules-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Test game rules without Unity licensing
+        run: dotnet run --project multiplayer-3d-game/verification/RulesHarness/RulesHarness.csproj --configuration Release
+
+  unity-editor:
+    needs: [rules-smoke, license-check]
+    if: ${{ needs.license-check.outputs.configured == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: game-ci/unity-test-runner@v4
+        id: tests
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: multiplayer-3d-game
+          unityVersion: 6000.0.0f1
+          testMode: editmode
+          artifactsPath: artifacts/editmode
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unity-editmode-results
+          path: artifacts/editmode
+
+  license-check:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check for configured Unity license
+        id: check
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        run: |
+          if [ -n "$UNITY_LICENSE" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Unity license is configured; Editor and player checks will run." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Unity EditMode and player checks skipped: configure the repository Actions secret UNITY_LICENSE." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  linux-player:
+    needs: [rules-smoke, license-check, unity-editor]
+    if: ${{ needs.license-check.outputs.configured == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          projectPath: multiplayer-3d-game
+          unityVersion: 6000.0.0f1
+          targetPlatform: StandaloneLinux64
+          buildName: RelayArena
+          buildsPath: multiplayer-3d-game/build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relay-arena-linux-player
+          path: multiplayer-3d-game/build

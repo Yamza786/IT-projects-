@@ -1,0 +1,6 @@
+/dist/
+/data/*.jsonl
+/siem
+/node_modules/
+/src/api/web/app.js
+.env

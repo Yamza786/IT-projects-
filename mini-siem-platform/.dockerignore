@@ -1,0 +1,6 @@
+.env
+.git
+node_modules
+src/api/web/app.js
+data
+*.log

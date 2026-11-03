@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "none",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "noEmitOnError": true,
+    "outFile": "src/api/web/app.js"
+  },
+  "files": ["src/ui.ts"]
+}

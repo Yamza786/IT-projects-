@@ -1,0 +1,5 @@
+CREATE TABLE projects (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
